@@ -1,0 +1,6 @@
+- Follow the Rise120 design spec and the current phase plan only; never skip a phase.
+- Make additive changes; never rebuild working code.
+- Make one Git commit per task.
+- Keep secrets out of the app and Git.
+- Read all plan limits from the server `app_config` table; do not hardcode them in the app.
+- Put every user-facing string through `t()`.
