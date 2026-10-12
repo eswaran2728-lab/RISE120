@@ -175,12 +175,13 @@ describe('Rise120 Row-Level Security (RLS) & Trigger Tests', () => {
       });
     expect(insErr).toBeNull();
 
-    const { data } = await clientB
+    const { data, error } = await clientB
       .from('checkins')
       .update({ weight_kg: 85 })
       .eq('user_id', userAId)
       .select();
 
+    expect(error).toBeNull();
     expect(data ?? []).toEqual([]);
 
     const { data: checkin } = await adminClient
@@ -192,12 +193,13 @@ describe('Rise120 Row-Level Security (RLS) & Trigger Tests', () => {
   });
 
   test('user cannot upgrade own entitlement: A updates own entitlements.tier to premium -> error or zero rows, and a service-role read still shows free', async () => {
-    const { data } = await clientA
+    const { data, error } = await clientA
       .from('entitlements')
       .update({ tier: 'premium' })
       .eq('user_id', userAId)
       .select();
 
+    expect(error).toBeNull();
     expect(data ?? []).toEqual([]);
 
     const { data: entitlement, error: entErr } = await adminClient
@@ -224,12 +226,13 @@ describe('Rise120 Row-Level Security (RLS) & Trigger Tests', () => {
   });
 
   test('user cannot edit app_config -> write rejected', async () => {
-    const { data } = await clientA
+    const { data, error } = await clientA
       .from('app_config')
       .update({ value: 999 })
       .eq('key', 'free_plan_days')
       .select();
 
+    expect(error).toBeNull();
     expect(data ?? []).toEqual([]);
 
     const { error: insErr } = await clientA
@@ -318,11 +321,12 @@ describe('Rise120 Row-Level Security (RLS) & Trigger Tests', () => {
       .select('*');
     expect(exErr).toBeNull();
 
-    const { data: delData } = await clientA
+    const { data: delData, error: delErr } = await clientA
       .from('profiles')
       .delete()
       .eq('id', userAId)
       .select();
+    expect(delErr).toBeNull();
     expect(delData ?? []).toEqual([]);
 
     const { data: profAfter } = await adminClient
