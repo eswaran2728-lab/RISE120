@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Rise120",
-    "slug": "rise120",
+    "slug": "eswar",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -40,6 +40,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "206d4a44-7cdc-4e01-bf26-fd064abb957a"
+      }
+    },
+    "owner": "eswaran0321s-team"
   }
 }
