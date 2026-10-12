@@ -175,12 +175,13 @@ describe('Rise120 Row-Level Security (RLS) & Trigger Tests', () => {
       });
     expect(insErr).toBeNull();
 
-    const { data } = await clientB
+    const { data, error } = await clientB
       .from('checkins')
       .update({ weight_kg: 85 })
       .eq('user_id', userAId)
       .select();
 
+    expect(error).toBeNull();
     expect(data ?? []).toEqual([]);
 
     const { data: checkin } = await adminClient
