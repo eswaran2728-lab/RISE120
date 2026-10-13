@@ -9,6 +9,9 @@ import { useSession } from '../src/auth/useSession';
 import { supabase } from '../src/lib/supabase';
 import { onOnboardingComplete, onPlanInputsSaved } from '../src/onboarding/completion';
 
+// Screens an onboarded user may be on; anywhere else (auth, onboarding) goes to Today.
+const SIGNED_IN_SEGMENTS = ['(tabs)', 'settings', 'plan-preview', 'checkin'];
+
 export default function RootLayout() {
   const { session, loading } = useSession();
   const [profileLoading, setProfileLoading] = useState(false);
@@ -98,7 +101,7 @@ export default function RootLayout() {
           router.replace('/plan-inputs' as any);
         }
       } else if (effectiveOnboarded === true) {
-        if (inAuthGroup || (topSegment !== '(tabs)' && topSegment !== 'settings')) {
+        if (inAuthGroup || !SIGNED_IN_SEGMENTS.includes(topSegment ?? '')) {
           router.replace('/(tabs)/today' as any);
         }
       }
