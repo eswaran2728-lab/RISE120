@@ -8,6 +8,7 @@ import { useSession } from '../src/auth/useSession';
 import { deleteAccount, signOut } from '../src/auth/authService';
 import { supabase } from '../src/lib/supabase';
 import { updateProfilePreference } from '../src/settings/preferences';
+import { cacheUnits } from '../src/profile/cache';
 
 const LANGUAGES = ['en', 'ms', 'ta'] as const;
 const UNITS = ['metric', 'imperial'] as const;
@@ -68,6 +69,7 @@ export default function SettingsScreen() {
     run(async () => {
       if (!userId) return;
       await updateProfilePreference(userId, { units: next });
+      await cacheUnits(userId, next);
       setUnits(next);
     });
 

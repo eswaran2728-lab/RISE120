@@ -5,18 +5,16 @@ import { t } from '../../src/i18n';
 import { useLanguage } from '../../src/i18n/useLanguage';
 import { tokens } from '../../src/theme/tokens';
 import { useSession } from '../../src/auth/useSession';
-import { supabase } from '../../src/lib/supabase';
-import { localDateString } from '../../src/lib/dates';
+import { useLocalDate } from '../../src/lib/useLocalDate';
+import { loadUnits } from '../../src/profile/cache';
 import { lbFromKg } from '../../src/onboarding/units';
-import { loadLoggedSets, loadPlanBundle, PlanBundle } from '../../src/plan/planData';
+import { loadPlanBundle, PlanBundle } from '../../src/plan/planData';
 import { getPlanDay } from '../../src/today/selectors';
-import { listPending } from '../../src/sync/queue';
 import { flushPending } from '../../src/sync/flush';
 import { supabaseTransport } from '../../src/sync/supabaseTransport';
+import { loadSessionSets } from '../../src/workout/session';
 import {
   formatClock,
-  LoggedSet,
-  mergeSets,
   nextSetNumber,
   parseSetFields,
   queueWorkoutSet,
@@ -36,7 +34,7 @@ export default function WorkoutScreen() {
   const [bundle, setBundle] = useState<PlanBundle | null>(null);
   const [units, setUnits] = useState<'metric' | 'imperial'>('metric');
   const [sets, setSets] = useState<SessionSet[]>([]);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null); // `${date}:${exerciseId}`
   const [showHow, setShowHow] = useState(false);
   const [repsText, setRepsText] = useState('');
   const [weightText, setWeightText] = useState('');
@@ -45,17 +43,13 @@ export default function WorkoutScreen() {
   const [now, setNow] = useState(() => Date.now());
   const [restDuration, setRestDuration] = useState(60);
 
-  const today = localDateString();
+  // Rolls over at local midnight and on resume. The open exercise form is tied to the date it was
+  // opened on, so a set can never be logged under a day the user is not looking at.
+  const today = useLocalDate();
 
   const refreshSets = useCallback(async () => {
     if (!userId) return;
-    // Server rows may be unavailable offline; pending local sets still show.
-    const server: LoggedSet[] = await loadLoggedSets(userId, today).catch(() => []);
-    const pending = (await listPending(userId))
-      .filter((op) => op.kind === 'workout_set' && op.date === today)
-      .map((op) => (op.kind === 'workout_set' ? { id: op.id, exerciseId: op.exerciseId, setNumber: op.setNumber, reps: op.reps, weightKg: op.weightKg } : null))
-      .filter((set): set is LoggedSet => set !== null);
-    setSets(mergeSets(server, pending));
+    setSets(await loadSessionSets(userId, today));
   }, [userId, today]);
 
   useFocusEffect(
@@ -64,13 +58,11 @@ export default function WorkoutScreen() {
       let alive = true;
       (async () => {
         try {
-          const [planBundle, profile] = await Promise.all([
-            loadPlanBundle(userId).catch(() => null),
-            supabase.from('profiles').select('units').eq('id', userId).maybeSingle(),
-          ]);
+          const [planBundle, knownUnits] = await Promise.all([loadPlanBundle(userId).catch(() => null), loadUnits(userId)]);
           if (!alive) return;
-          setBundle(planBundle);
-          if (profile.data?.units === 'imperial') setUnits('imperial');
+          // A failed refresh keeps the plan we already have instead of blanking the screen.
+          if (planBundle) setBundle(planBundle);
+          setUnits(knownUnits);
           await refreshSets();
         } finally {
           if (alive) setLoading(false);
@@ -93,6 +85,9 @@ export default function WorkoutScreen() {
   const exerciseName = (id: string) => bundle?.exercises.find((e) => e.id === id)?.name ?? '';
   const displayWeight = (kg: number) => (units === 'imperial' ? round1(lbFromKg(kg)) : kg);
   const weightUnit = units === 'imperial' ? 'lb' : 'kg';
+
+  const selectedPrefix = `${today}:`;
+  const selected = selectedKey?.startsWith(selectedPrefix) ? selectedKey.slice(selectedPrefix.length) : null;
 
   const logSet = async () => {
     if (!userId || !selected) return;
@@ -170,7 +165,7 @@ export default function WorkoutScreen() {
             <TouchableOpacity
               accessibilityRole="button"
               onPress={() => {
-                setSelected(open ? null : entry.exercise_id);
+                setSelectedKey(open ? null : `${today}:${entry.exercise_id}`);
                 setRepsText(String(entry.reps));
                 setWeightText('');
                 setError(null);

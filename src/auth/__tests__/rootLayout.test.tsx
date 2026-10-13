@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { signOut } from '../authService';
 import { useSync } from '../../sync/useSync';
 import { notifyOnboardingComplete, notifyPlanInputsSaved } from '../../onboarding/completion';
+import { mockStore } from '../../sync/testing/storageMock';
 
 const COMPLETE_PROFILE = { onboarded_at: '2026-10-12T00:00:00Z', energy_sex: 'male', activity_level: 'light' };
 const mockReplace = jest.fn();
@@ -24,6 +25,10 @@ jest.mock('../useSession', () => ({
   useSession: () => ({ session: mockSession, loading: false }),
 }));
 
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: jest.requireActual('../../sync/testing/storageMock').asyncStorageMock,
+}));
 jest.mock('../../sync/useSync', () => ({ useSync: jest.fn() }));
 jest.mock('../authService', () => ({ signOut: jest.fn().mockResolvedValue(undefined) }));
 
@@ -49,6 +54,7 @@ async function renderLayout(): Promise<ReactTestRenderer> {
 describe('RootLayout profile lookup', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockStore.clear();
     mockSegments = [];
     mockSession = { user: { id: 'u1' } };
   });
@@ -189,5 +195,40 @@ describe('RootLayout profile lookup', () => {
     await renderLayout();
 
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  describe('offline cold start', () => {
+    it('uses the last known profile when the lookup fails, instead of the retry screen', async () => {
+      mockProfileLookup({ data: { ...COMPLETE_PROFILE }, error: null });
+      const first = await renderLayout();
+      await act(async () => first.unmount());
+      mockReplace.mockClear();
+
+      mockProfileLookup({ data: null, error: { message: 'Network request failed' } });
+      const tree = await renderLayout();
+
+      expect(tree.root.findAllByProps({ testID: 'profile-retry' })).toHaveLength(0);
+      expect(mockReplace).toHaveBeenLastCalledWith('/(tabs)/today');
+    });
+
+    it('still shows the retry screen when offline and nothing is remembered', async () => {
+      mockProfileLookup({ data: null, error: { message: 'Network request failed' } });
+
+      const tree = await renderLayout();
+
+      expect(tree.root.findByProps({ testID: 'profile-retry' })).toBeTruthy();
+    });
+
+    it('does not apply another account remembered profile', async () => {
+      mockProfileLookup({ data: { ...COMPLETE_PROFILE }, error: null });
+      const first = await renderLayout();
+      await act(async () => first.unmount());
+
+      mockSession = { user: { id: 'u2' } };
+      mockProfileLookup({ data: null, error: { message: 'Network request failed' } });
+      const tree = await renderLayout();
+
+      expect(tree.root.findByProps({ testID: 'profile-retry' })).toBeTruthy();
+    });
   });
 });

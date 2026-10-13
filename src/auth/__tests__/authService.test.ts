@@ -4,6 +4,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { loadDraft, saveDraft } from '../../onboarding/draft';
 import { enqueue, listPending } from '../../sync/queue';
 import { removeLocalPhotos } from '../../checkin/photos';
+import { readCache, writeCache } from '../../cache/userCache';
 
 jest.mock('../../checkin/photos', () => ({ removeLocalPhotos: jest.fn() }));
 
@@ -222,6 +223,34 @@ describe('authService', () => {
 
       expect(await listPending('u1')).toEqual([]);
       expect(await listPending('u2')).toHaveLength(1);
+    });
+
+    it('removes the deleted account cached plan and profile, but not another account', async () => {
+      await writeCache('u1', 'plan', { x: 1 });
+      await writeCache('u1', 'profile', { y: 2 });
+      await writeCache('u2', 'plan', { x: 3 });
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({ data: { deleted: true }, error: null });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await deleteAccount();
+
+      expect(await readCache('u1', 'plan')).toBeNull();
+      expect(await readCache('u1', 'profile')).toBeNull();
+      expect(await readCache('u2', 'plan')).toEqual({ x: 3 });
+    });
+
+    it('still signs out locally if clearing local photos throws', async () => {
+      (removeLocalPhotos as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('disk error');
+      });
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({ data: { deleted: true }, error: null });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await deleteAccount();
+
+      expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
     });
 
     it('removes the deleted account unsynced local photos', async () => {

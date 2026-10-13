@@ -66,16 +66,30 @@ describe('flushPending', () => {
     expect(await listPending('A')).toEqual([]);
   });
 
-  it('leaves an operation pending when the transport fails, and stops there', async () => {
+  it('leaves a failing operation pending but still sends the others', async () => {
     const server = fakeServer();
-    (server.transport.upsertWorkoutSet as jest.Mock).mockRejectedValueOnce(new Error('Network request failed'));
+    (server.transport.upsertWorkoutSet as jest.Mock).mockRejectedValueOnce(new Error('Bad request'));
+    await enqueue('A', workoutSet('s1'));
+    await enqueue('A', workoutSet('s2'));
+    await enqueue('A', checkin(1000, 70));
+
+    const result = await flushPending('A', server.transport);
+
+    expect(result).toEqual({ synced: 2, failed: 1, remaining: 1 });
+    expect(server.sets.has('A:s2')).toBe(true);
+    expect(server.checkins.size).toBe(1);
+    expect((await listPending('A')).map((op) => op.kind === 'workout_set' && op.id)).toEqual(['s1']);
+  });
+
+  it('reports every item as failed while the network is down', async () => {
+    const server = fakeServer();
+    (server.transport.upsertWorkoutSet as jest.Mock).mockRejectedValue(new Error('Network request failed'));
     await enqueue('A', workoutSet('s1'));
     await enqueue('A', workoutSet('s2'));
 
     const result = await flushPending('A', server.transport);
 
-    expect(result).toEqual({ synced: 0, failed: 1, remaining: 2 });
-    expect(server.sets.size).toBe(0);
+    expect(result).toEqual({ synced: 0, failed: 2, remaining: 2 });
   });
 
   it('creates exactly one server row when the response is lost and the flush is retried', async () => {

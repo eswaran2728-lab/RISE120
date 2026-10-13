@@ -25,6 +25,18 @@ jest.mock('../../lib/supabase', () => ({
   supabase: { storage: { from: jest.fn() } },
 }));
 
+const mockSaveAsync = jest.fn();
+const mockResize = jest.fn();
+jest.mock('expo-image-manipulator', () => ({
+  SaveFormat: { JPEG: 'jpeg' },
+  ImageManipulator: {
+    manipulate: jest.fn().mockImplementation(() => {
+      const context = { resize: (size: unknown) => (mockResize(size), context), renderAsync: async () => ({ saveAsync: mockSaveAsync }) };
+      return context;
+    }),
+  },
+}));
+
 const upload = jest.fn();
 const createSignedUrl = jest.fn();
 
@@ -33,20 +45,40 @@ describe('check-in photos', () => {
     jest.clearAllMocks();
     for (const key of Object.keys(mockFiles)) delete mockFiles[key];
     for (const key of Object.keys(mockDirs)) delete mockDirs[key];
+    mockSaveAsync.mockResolvedValue({ uri: 'file:///cache/manipulated.jpg' });
     upload.mockResolvedValue({ error: null });
     createSignedUrl.mockResolvedValue({ data: { signedUrl: 'https://signed.example/photo' }, error: null });
     (supabase.storage.from as jest.Mock).mockReturnValue({ upload, createSignedUrl });
   });
 
-  it('copies a picked photo into the per-user documents folder', async () => {
-    const saved = await saveLocalPhoto('u1', '2026-10-13', 'file:///cache/picked.jpg');
+  it('re-encodes a picked photo and copies it into the per-user documents folder under a unique name', async () => {
+    const saved = await saveLocalPhoto('u1', '2026-10-13', 'file:///cache/picked.jpg', 1200);
 
-    expect(saved).toBe('file:///docs/checkin-photos/u1/2026-10-13.jpg');
-    expect(mockFiles['file:///cache/picked.jpg'].copy).toHaveBeenCalledWith(
-      expect.objectContaining({ uri: 'file:///docs/checkin-photos/u1/2026-10-13.jpg' }),
-      { overwrite: true }
-    );
+    expect(saved).toMatch(/^file:\/\/\/docs\/checkin-photos\/u1\/2026-10-13-\d+\.jpg$/);
+    expect(mockSaveAsync).toHaveBeenCalledWith({ format: 'jpeg', compress: 0.7 });
+    expect(mockFiles['file:///cache/manipulated.jpg'].copy).toHaveBeenCalledWith(expect.objectContaining({ uri: saved }), { overwrite: true });
     expect(mockDirs['file:///docs/checkin-photos/u1'].create).toHaveBeenCalledWith({ idempotent: true, intermediates: true });
+  });
+
+  it('downsizes a large photo to 1600 px wide so it stays under the upload limit', async () => {
+    await saveLocalPhoto('u1', '2026-10-13', 'file:///cache/big.jpg', 4000);
+
+    expect(mockResize).toHaveBeenCalledWith({ width: 1600 });
+  });
+
+  it('does not resize a photo that is already small', async () => {
+    await saveLocalPhoto('u1', '2026-10-13', 'file:///cache/small.jpg', 1200);
+
+    expect(mockResize).not.toHaveBeenCalled();
+  });
+
+  it('keeps a pending photo when the user picks another one (unique files)', async () => {
+    jest.spyOn(Date, 'now').mockReturnValueOnce(1).mockReturnValueOnce(2);
+
+    const first = await saveLocalPhoto('u1', '2026-10-13', 'file:///cache/a.jpg', 1000);
+    const second = await saveLocalPhoto('u1', '2026-10-13', 'file:///cache/b.jpg', 1000);
+
+    expect(first).not.toBe(second);
   });
 
   it('removes every local photo for an account', () => {

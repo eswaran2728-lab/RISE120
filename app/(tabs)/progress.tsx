@@ -5,8 +5,8 @@ import { t } from '../../src/i18n';
 import { useLanguage } from '../../src/i18n/useLanguage';
 import { tokens } from '../../src/theme/tokens';
 import { useSession } from '../../src/auth/useSession';
-import { supabase } from '../../src/lib/supabase';
-import { localDateString } from '../../src/lib/dates';
+import { useLocalDate } from '../../src/lib/useLocalDate';
+import { loadUnits } from '../../src/profile/cache';
 import { lbFromKg } from '../../src/onboarding/units';
 import { getPhotoUrl } from '../../src/checkin/photos';
 import { loadProgress } from '../../src/progress/load';
@@ -21,6 +21,7 @@ export default function ProgressScreen() {
   const { session } = useSession();
   const { width } = useWindowDimensions();
   const userId = session?.user?.id;
+  const today = useLocalDate();
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<ProgressState | null>(null);
   const [units, setUnits] = useState<'metric' | 'imperial'>('metric');
@@ -32,16 +33,10 @@ export default function ProgressScreen() {
       let alive = true;
       (async () => {
         try {
-          const input = await loadProgress(userId, localDateString());
-          let imperial = false;
-          try {
-            const profile = await supabase.from('profiles').select('units').eq('id', userId).maybeSingle();
-            imperial = profile.data?.units === 'imperial';
-          } catch {
-            // Offline: show metric.
-          }
+          const input = await loadProgress(userId, today);
+          const knownUnits = await loadUnits(userId);
           if (!alive) return;
-          setUnits(imperial ? 'imperial' : 'metric');
+          setUnits(knownUnits);
           setProgress(input ? deriveProgress(input) : null);
         } catch {
           if (alive) setProgress(null);
@@ -52,7 +47,7 @@ export default function ProgressScreen() {
       return () => {
         alive = false;
       };
-    }, [userId])
+    }, [userId, today])
   );
 
   // Private photos are read through short-lived signed URLs.

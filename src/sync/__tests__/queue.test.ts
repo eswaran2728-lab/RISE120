@@ -1,5 +1,5 @@
 import { mockStore } from '../testing/storageMock';
-import { clearPending, enqueue, listPending } from '../queue';
+import { clearPending, clearPhotoUri, enqueue, listPending } from '../queue';
 import type { CheckinOperation, WorkoutSetOperation } from '../types';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -110,5 +110,15 @@ describe('offline queue', () => {
     await enqueue('A', checkin({ weightKg: 71, photoUri: null, updatedAt: 2000 }));
 
     expect((await listPending('A'))[0]).toMatchObject({ weightKg: 71, photoUri: 'file:///docs/photo.jpg' });
+  });
+
+  it('clearPhotoUri drops an uploaded photo reference from a newer queued edit, and only that photo', async () => {
+    await enqueue('A', checkin({ photoUri: 'file:///docs/new.jpg', updatedAt: 1000 }));
+
+    await clearPhotoUri('A', '2026-10-13', 'file:///docs/other.jpg');
+    expect((await listPending('A'))[0]).toMatchObject({ photoUri: 'file:///docs/new.jpg' });
+
+    await clearPhotoUri('A', '2026-10-13', 'file:///docs/new.jpg');
+    expect((await listPending('A'))[0]).toMatchObject({ photoUri: null, updatedAt: 1000 });
   });
 });

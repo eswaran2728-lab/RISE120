@@ -28,7 +28,9 @@ export default function PlanPreviewScreen() {
 
   const start = async () => {
     if (userId) await markPreviewSeen(userId);
-    router.replace('/(tabs)/today' as Href);
+    // Back to Today, which opened this screen; replacing would stack a second set of tabs.
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/today' as Href);
   };
 
   if (!bundle) {

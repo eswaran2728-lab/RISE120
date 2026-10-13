@@ -8,6 +8,7 @@ import { tokens } from '../src/theme/tokens';
 import { useSession } from '../src/auth/useSession';
 import { supabase } from '../src/lib/supabase';
 import { onOnboardingComplete, onPlanInputsSaved } from '../src/onboarding/completion';
+import { cacheUnits, loadProfileCache, ProfileCache, saveProfileCache, updateProfileCache } from '../src/profile/cache';
 
 // Screens an onboarded user may be on; anywhere else (auth, onboarding) goes to Today.
 const SIGNED_IN_SEGMENTS = ['(tabs)', 'settings', 'plan-preview', 'checkin'];
@@ -31,27 +32,35 @@ export default function RootLayout() {
       if (!isMounted) return;
       setProfileLoading(true);
       setProfileError(false);
+      const uid = session.user.id;
+      const apply = (profile: ProfileCache) => {
+        if (profile.language && ['en', 'ms', 'ta'].includes(profile.language)) {
+          void i18next.changeLanguage(profile.language);
+        }
+        if (isMounted) {
+          setOnboarded({ userId: uid, value: profile.onboarded, needsPlanInputs: profile.needsPlanInputs });
+        }
+      };
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('onboarded_at, language, energy_sex, activity_level')
-          .eq('id', session.user.id)
+          .select('onboarded_at, language, energy_sex, activity_level, units')
+          .eq('id', uid)
           .maybeSingle();
         if (error) throw error;
-        if (data?.language && ['en', 'ms', 'ta'].includes(data.language)) {
-          void i18next.changeLanguage(data.language);
-        }
-        if (isMounted) {
-          setOnboarded({
-            userId: session.user.id,
-            value: Boolean(data?.onboarded_at),
-            needsPlanInputs: !data?.energy_sex || !data?.activity_level,
-          });
-        }
+        const profile: ProfileCache = {
+          onboarded: Boolean(data?.onboarded_at),
+          needsPlanInputs: !data?.energy_sex || !data?.activity_level,
+          language: data?.language ?? null,
+        };
+        await saveProfileCache(uid, profile);
+        await cacheUnits(uid, data?.units === 'imperial' ? 'imperial' : 'metric');
+        apply(profile);
       } catch {
-        if (isMounted) {
-          setProfileError(true);
-        }
+        // Offline cold start: use what we last knew about this account instead of blocking the app.
+        const cached = await loadProfileCache(uid);
+        if (cached) apply(cached);
+        else if (isMounted) setProfileError(true);
       } finally {
         if (isMounted) {
           setProfileLoading(false);
@@ -67,12 +76,21 @@ export default function RootLayout() {
   const userId = session?.user?.id;
   useSync(userId);
   useEffect(
-    () => onOnboardingComplete(() => userId && setOnboarded({ userId, value: true, needsPlanInputs: false })),
+    () =>
+      onOnboardingComplete(() => {
+        if (!userId) return;
+        setOnboarded({ userId, value: true, needsPlanInputs: false });
+        void updateProfileCache(userId, { onboarded: true });
+      }),
     [userId]
   );
   useEffect(
-    () => onPlanInputsSaved(() => setOnboarded((current) => (current ? { ...current, needsPlanInputs: false } : current))),
-    []
+    () =>
+      onPlanInputsSaved(() => {
+        setOnboarded((current) => (current ? { ...current, needsPlanInputs: false } : current));
+        if (userId) void updateProfileCache(userId, { needsPlanInputs: false });
+      }),
+    [userId]
   );
 
   // The flag only counts for the user it was loaded for, so it cannot leak between accounts.

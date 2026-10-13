@@ -15,9 +15,9 @@ async function run(userId: string, transport: SyncTransport): Promise<SyncResult
       await removeIfUnchanged(userId, op);
       synced += 1;
     } catch {
-      // Keep it queued and stop; the next trigger retries. Server writes are idempotent.
-      failed = 1;
-      break;
+      // Keep it queued and carry on: one item that keeps failing must not block the rest.
+      // The next trigger retries it, and server writes are idempotent.
+      failed += 1;
     }
   }
   const remaining = (await listPending(userId)).length;

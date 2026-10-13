@@ -6,8 +6,8 @@ import { t } from '../src/i18n';
 import { useLanguage } from '../src/i18n/useLanguage';
 import { tokens } from '../src/theme/tokens';
 import { useSession } from '../src/auth/useSession';
-import { supabase } from '../src/lib/supabase';
-import { localDateString } from '../src/lib/dates';
+import { useLocalDate } from '../src/lib/useLocalDate';
+import { loadUnits } from '../src/profile/cache';
 import { lbFromKg } from '../src/onboarding/units';
 import { MOOD_MAX, MOOD_MIN, parseCheckinFields, queueCheckin } from '../src/checkin/checkin';
 import { loadCheckin } from '../src/checkin/load';
@@ -25,7 +25,7 @@ export default function CheckinScreen() {
   const router = useRouter();
   const { session } = useSession();
   const userId = session?.user?.id;
-  const today = localDateString();
+  const today = useLocalDate();
   const [ready, setReady] = useState(false);
   const [units, setUnits] = useState<'metric' | 'imperial'>('metric');
   const [weightText, setWeightText] = useState('');
@@ -41,16 +41,11 @@ export default function CheckinScreen() {
     if (!userId) return;
     let alive = true;
     (async () => {
-      let profile: { data: { units?: string } | null } | null = null;
-      try {
-        profile = await supabase.from('profiles').select('units').eq('id', userId).maybeSingle();
-      } catch {
-        // Offline: fall back to metric.
-      }
+      const knownUnits = await loadUnits(userId);
       const existing = await loadCheckin(userId, today);
       if (!alive) return;
-      const imperial = profile?.data?.units === 'imperial';
-      if (imperial) setUnits('imperial');
+      const imperial = knownUnits === 'imperial';
+      setUnits(knownUnits);
       if (existing) {
         if (existing.weightKg !== null) setWeightText(String(imperial ? round1(lbFromKg(existing.weightKg)) : existing.weightKg));
         if (existing.sleepHours !== null) setSleepText(String(existing.sleepHours));
@@ -70,7 +65,7 @@ export default function CheckinScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
     if (result.canceled || !result.assets?.[0]) return;
     try {
-      setNewPhotoUri(await saveLocalPhoto(userId, today, result.assets[0].uri));
+      setNewPhotoUri(await saveLocalPhoto(userId, today, result.assets[0].uri, result.assets[0].width));
     } catch {
       setSaveError(t('errors.generic'));
     }
@@ -90,7 +85,9 @@ export default function CheckinScreen() {
     try {
       await queueCheckin(userId, today, { weight: weightText, sleep: sleepText, mood, units, photoUri: newPhotoUri });
       void flushPending(userId, supabaseTransport).catch(() => undefined);
-      router.replace('/(tabs)/today' as Href);
+      // Go back to Today (it reloads on focus); replacing would stack a second set of tabs.
+      if (router.canGoBack()) router.back();
+      else router.replace('/(tabs)/today' as Href);
     } catch {
       setSaveError(t('errors.generic'));
     } finally {

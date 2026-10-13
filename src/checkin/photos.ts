@@ -1,18 +1,29 @@
 import { Directory, File, Paths } from 'expo-file-system';
+import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { supabase } from '../lib/supabase';
 import type { LocalDate } from '../sync/types';
 
 const BUCKET = 'checkin-photos';
 const SIGNED_URL_SECONDS = 3600;
+// The bucket accepts up to 5 MB; phone cameras easily exceed that, so photos are downsized and re-encoded.
+const MAX_PHOTO_WIDTH = 1600;
+const PHOTO_QUALITY = 0.7;
 
 const userDirectory = (userId: string) => new Directory(Paths.document, 'checkin-photos', userId);
 
 // The picker's cache file can be cleared by the system, so keep our own copy until it uploads.
-export async function saveLocalPhoto(userId: string, date: LocalDate, pickedUri: string): Promise<string> {
+// The photo is downsized (if wide) and re-encoded as JPEG, and each pick gets its own file so
+// choosing another photo never replaces one that is still waiting to upload.
+export async function saveLocalPhoto(userId: string, date: LocalDate, pickedUri: string, pickedWidth?: number): Promise<string> {
+  let context = ImageManipulator.manipulate(pickedUri);
+  if (pickedWidth && pickedWidth > MAX_PHOTO_WIDTH) context = context.resize({ width: MAX_PHOTO_WIDTH });
+  const rendered = await context.renderAsync();
+  const processed = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: PHOTO_QUALITY });
+
   const directory = userDirectory(userId);
   directory.create({ idempotent: true, intermediates: true });
-  const destination = new File(directory, `${date}.jpg`);
-  await new File(pickedUri).copy(destination, { overwrite: true });
+  const destination = new File(directory, `${date}-${Date.now()}.jpg`);
+  await new File(processed.uri).copy(destination, { overwrite: true });
   return destination.uri;
 }
 

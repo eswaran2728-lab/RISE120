@@ -1,8 +1,10 @@
 import { supabase } from '../../lib/supabase';
 import { supabaseTransport } from '../supabaseTransport';
 import { localPhotoExists, uploadCheckinPhoto } from '../../checkin/photos';
+import { clearPhotoUri } from '../queue';
 import type { CheckinOperation, WorkoutSetOperation } from '../types';
 
+jest.mock('../queue', () => ({ clearPhotoUri: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../../checkin/photos', () => ({
   uploadCheckinPhoto: jest.fn(),
   localPhotoExists: jest.fn().mockReturnValue(true),
@@ -97,6 +99,14 @@ describe('supabaseTransport', () => {
         expect.objectContaining({ photo_path: 'A/2026-10-13.jpg', weight_kg: 70.5 }),
         { onConflict: 'user_id,checkin_date' }
       );
+    });
+
+    it('clears the uploaded photo reference from any newer queued edit', async () => {
+      (uploadCheckinPhoto as jest.Mock).mockResolvedValue('A/2026-10-13.jpg');
+
+      await supabaseTransport.upsertCheckin('A', withPhoto);
+
+      expect(clearPhotoUri).toHaveBeenCalledWith('A', '2026-10-13', 'file:///docs/photo.jpg');
     });
 
     it('keeps the check-in pending when the photo upload fails', async () => {

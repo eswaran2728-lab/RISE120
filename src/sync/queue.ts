@@ -64,6 +64,22 @@ export function removeIfUnchanged(userId: string, op: PendingOperation): Promise
   });
 }
 
+// After a photo uploads, a newer queued edit may still point at that (now deleted) local file.
+// Drop the reference so the edit syncs on its own; the uploaded photo stays on the server.
+export function clearPhotoUri(userId: string, date: string, uri: string): Promise<void> {
+  return withLock(userId, async () => {
+    let changed = false;
+    const operations = (await read(userId)).map((op) => {
+      if (op.kind === 'checkin' && op.date === date && op.photoUri === uri) {
+        changed = true;
+        return { ...op, photoUri: null };
+      }
+      return op;
+    });
+    if (changed) await write(userId, operations);
+  });
+}
+
 export function clearPending(userId: string): Promise<void> {
   return withLock(userId, () => write(userId, []));
 }

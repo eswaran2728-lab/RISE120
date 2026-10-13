@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
 import { localPhotoExists, removeLocalPhoto, uploadCheckinPhoto } from '../checkin/photos';
+import { clearPhotoUri } from './queue';
 import type { CheckinOperation, SyncTransport, WorkoutSetOperation } from './types';
 
 // Belt and braces: the queue is already per user, and row-level security rejects a foreign
@@ -48,6 +49,7 @@ export const supabaseTransport: SyncTransport = {
     if (error) throw new Error(error.message);
     if (hasLocalPhoto) {
       try {
+        await clearPhotoUri(userId, op.date, op.photoUri as string);
         removeLocalPhoto(op.photoUri as string);
       } catch {
         // Best effort: the photo is already safely uploaded.

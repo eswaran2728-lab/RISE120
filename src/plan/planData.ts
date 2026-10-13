@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { readCache, writeCache } from '../cache/userCache';
 import type { LoggedSet } from '../workout/log';
 import type { Exercise, Plan, PlanDay, PlanWorkout } from './types';
 
@@ -41,8 +42,7 @@ export interface PlanBundle {
   exercises: Exercise[];
 }
 
-// Reads run under row-level security, so a user only ever receives their own plan.
-export async function loadPlanBundle(userId: string): Promise<PlanBundle | null> {
+async function fetchPlanBundle(userId: string): Promise<PlanBundle | null> {
   const { data: planRow, error: planError } = await supabase
     .from('plans')
     .select('id, start_date, status')
@@ -67,6 +67,21 @@ export async function loadPlanBundle(userId: string): Promise<PlanBundle | null>
     days: (daysResult.data ?? []).map(mapPlanDay),
     exercises: (exercisesResult.data ?? []).map(mapExercise),
   };
+}
+
+// Reads run under row-level security, so a user only ever receives their own plan. The last good
+// bundle is cached per user: with no signal the app keeps working from it. "No plan" from the
+// server is an answer, not a failure, so it never falls back to a stale cache.
+export async function loadPlanBundle(userId: string): Promise<PlanBundle | null> {
+  try {
+    const bundle = await fetchPlanBundle(userId);
+    if (bundle) await writeCache(userId, 'plan', bundle);
+    return bundle;
+  } catch (error) {
+    const cached = await readCache<PlanBundle>(userId, 'plan');
+    if (cached) return cached;
+    throw error;
+  }
 }
 
 export async function loadLoggedSets(userId: string, date: string): Promise<LoggedSet[]> {

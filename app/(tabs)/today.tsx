@@ -5,17 +5,16 @@ import { t } from '../../src/i18n';
 import { useLanguage } from '../../src/i18n/useLanguage';
 import { tokens } from '../../src/theme/tokens';
 import { useSession } from '../../src/auth/useSession';
-import { localDateString } from '../../src/lib/dates';
+import { useLocalDate } from '../../src/lib/useLocalDate';
 import { ProgressRing } from '../../src/ui/ProgressRing';
 import { ensurePlan } from '../../src/plan/ensurePlan';
 import { generatePlan } from '../../src/plan/generatePlan';
-import { loadLoggedSets, loadPlanBundle } from '../../src/plan/planData';
+import { loadPlanBundle } from '../../src/plan/planData';
 import { hasSeenPreview } from '../../src/plan/previewSeen';
 import { loadCheckin } from '../../src/checkin/load';
-import { listPending } from '../../src/sync/queue';
 import { loadCheckinDates } from '../../src/today/load';
 import { checkinStreak, deriveToday, getPlanDay, PLAN_LENGTH, TodayState } from '../../src/today/selectors';
-import { LoggedSet, mergeSets } from '../../src/workout/log';
+import { loadSessionSets } from '../../src/workout/session';
 
 type Status = 'loading' | 'creating' | 'error' | 'ready';
 
@@ -29,10 +28,10 @@ export default function TodayScreen() {
   const [streak, setStreak] = useState(0);
   const [workoutNames, setWorkoutNames] = useState<string[]>([]);
   const mounted = useRef(true);
+  const date = useLocalDate(); // rolls over at midnight and on resume, then the screen reloads
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const date = localDateString();
     const alive = () => mounted.current;
     try {
       setStatus((current) => (current === 'ready' ? current : 'loading'));
@@ -50,19 +49,14 @@ export default function TodayScreen() {
       }
 
       const day = getPlanDay(bundle.plan, bundle.days, date);
-      const server: LoggedSet[] = await loadLoggedSets(userId, date).catch(() => []);
-      const pendingSets = (await listPending(userId)).flatMap((op) =>
-        op.kind === 'workout_set' && op.date === date
-          ? [{ id: op.id, exerciseId: op.exerciseId, setNumber: op.setNumber, reps: op.reps, weightKg: op.weightKg }]
-          : []
-      );
+      const sessionSets = await loadSessionSets(userId, date);
       const checkin = await loadCheckin(userId, date);
       const dates = await loadCheckinDates(userId);
       if (!alive()) return;
 
       setStreak(checkinStreak(dates, date));
       if (day) {
-        setToday(deriveToday(day, mergeSets(server, pendingSets), checkin !== null));
+        setToday(deriveToday(day, sessionSets, checkin !== null));
         setWorkoutNames(
           day.workout.kind === 'workout'
             ? day.workout.exercises.map((e) => bundle.exercises.find((x) => x.id === e.exercise_id)?.name ?? '')
@@ -75,7 +69,7 @@ export default function TodayScreen() {
     } catch {
       if (alive()) setStatus('error');
     }
-  }, [userId, router]);
+  }, [userId, router, date]);
 
   useFocusEffect(
     useCallback(() => {
