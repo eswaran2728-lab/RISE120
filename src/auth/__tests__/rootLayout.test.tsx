@@ -1,7 +1,9 @@
 import React from 'react';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import RootLayout from '../../../app/_layout';
+import i18next from '../../i18n';
 import { supabase } from '../../lib/supabase';
+import { signOut } from '../authService';
 import { notifyOnboardingComplete } from '../../onboarding/completion';
 
 const mockReplace = jest.fn();
@@ -20,14 +22,16 @@ jest.mock('../useSession', () => ({
   useSession: () => ({ session: mockSession, loading: false }),
 }));
 
+jest.mock('../authService', () => ({ signOut: jest.fn().mockResolvedValue(undefined) }));
+
 jest.mock('../../lib/supabase', () => ({
   supabase: { from: jest.fn() },
 }));
 
 function mockProfileLookup(result: { data: unknown; error: unknown } | Error) {
-  const single = result instanceof Error ? jest.fn().mockRejectedValue(result) : jest.fn().mockResolvedValue(result);
+  const maybeSingle = result instanceof Error ? jest.fn().mockRejectedValue(result) : jest.fn().mockResolvedValue(result);
   (supabase.from as jest.Mock).mockReturnValueOnce({
-    select: () => ({ eq: () => ({ single }) }),
+    select: () => ({ eq: () => ({ maybeSingle }) }),
   });
 }
 
@@ -104,7 +108,7 @@ describe('RootLayout profile lookup', () => {
 
     mockReplace.mockClear();
     (supabase.from as jest.Mock).mockReturnValueOnce({
-      select: () => ({ eq: () => ({ single: () => new Promise(() => {}) }) }),
+      select: () => ({ eq: () => ({ maybeSingle: () => new Promise(() => {}) }) }),
     });
     mockSession = { user: { id: 'u2' } };
     await act(async () => {
@@ -112,5 +116,33 @@ describe('RootLayout profile lookup', () => {
     });
 
     expect(mockReplace).not.toHaveBeenCalledWith('/(tabs)/today');
+  });
+
+  it('treats a missing profile row as not onboarded instead of an error', async () => {
+    mockProfileLookup({ data: null, error: null });
+
+    await renderLayout();
+
+    expect(mockReplace).toHaveBeenLastCalledWith('/onboarding/1');
+  });
+
+  it('lets the user sign out from the retry screen', async () => {
+    mockProfileLookup({ data: null, error: { message: 'network request failed' } });
+    const tree = await renderLayout();
+
+    await act(async () => {
+      tree.root.findByProps({ testID: 'profile-signout' }).props.onPress();
+    });
+
+    expect(signOut).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores the saved language from the profile', async () => {
+    mockProfileLookup({ data: { onboarded_at: '2026-10-12T00:00:00Z', language: 'ms' }, error: null });
+
+    await renderLayout();
+
+    expect(i18next.language).toBe('ms');
+    await i18next.changeLanguage('en');
   });
 });

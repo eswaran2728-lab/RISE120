@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { t } from '../../src/i18n';
+import { authErrorKey } from '../../src/auth/authErrors';
 import { tokens } from '../../src/theme/tokens';
 import { signUpWithEmail, signInWithGoogle } from '../../src/auth/authService';
 
@@ -11,15 +12,18 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   const handleSignUp = async () => {
     if (!email || !password) return;
     try {
       setLoading(true);
       setErrorMessage(null);
-      await signUpWithEmail(email.trim(), password);
-    } catch (err: any) {
-      setErrorMessage(err?.message || t('errors.generic'));
+      setInfoMessage(null);
+      const { needsConfirmation } = await signUpWithEmail(email.trim(), password);
+      if (needsConfirmation) setInfoMessage(t('auth.checkEmail'));
+    } catch (err: unknown) {
+      setErrorMessage(t(authErrorKey(err)));
     } finally {
       setLoading(false);
     }
@@ -30,8 +34,8 @@ export default function SignUpScreen() {
       setLoading(true);
       setErrorMessage(null);
       await signInWithGoogle();
-    } catch (err: any) {
-      setErrorMessage(err?.message || t('errors.generic'));
+    } catch (err: unknown) {
+      setErrorMessage(t(authErrorKey(err)));
     } finally {
       setLoading(false);
     }
@@ -43,6 +47,7 @@ export default function SignUpScreen() {
       <Text style={styles.subtitle}>{t('auth.signUp')}</Text>
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      {infoMessage ? <Text style={styles.infoText}>{infoMessage}</Text> : null}
 
       <TextInput
         style={styles.input}
@@ -112,6 +117,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     textAlign: 'center',
     marginBottom: tokens.space[5],
+  },
+  infoText: {
+    color: tokens.color.accent,
+    textAlign: 'center',
+    marginBottom: tokens.space[3],
   },
   errorText: {
     color: '#FF6B6B',

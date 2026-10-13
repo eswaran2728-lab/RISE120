@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { DarkTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-router';
-import { t } from '../src/i18n';
+import i18next, { t } from '../src/i18n';
+import { signOut } from '../src/auth/authService';
 import { tokens } from '../src/theme/tokens';
 import { useSession } from '../src/auth/useSession';
 import { supabase } from '../src/lib/supabase';
@@ -29,10 +30,13 @@ export default function RootLayout() {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('onboarded_at')
+          .select('onboarded_at, language')
           .eq('id', session.user.id)
-          .single();
+          .maybeSingle();
         if (error) throw error;
+        if (data?.language && ['en', 'ms', 'ta'].includes(data.language)) {
+          void i18next.changeLanguage(data.language);
+        }
         if (isMounted) {
           setOnboarded({ userId: session.user.id, value: Boolean(data?.onboarded_at) });
         }
@@ -100,6 +104,9 @@ export default function RootLayout() {
         <Text style={{ color: tokens.color.text }}>{t('errors.generic')}</Text>
         <Pressable testID="profile-retry" accessibilityRole="button" onPress={() => setAttempt((n) => n + 1)}>
           <Text style={{ color: tokens.color.accent }}>{t('errors.retry')}</Text>
+        </Pressable>
+        <Pressable testID="profile-signout" accessibilityRole="button" onPress={() => void signOut()}>
+          <Text style={{ color: tokens.color.text }}>{t('settings.signOut')}</Text>
         </Pressable>
       </View>
     );

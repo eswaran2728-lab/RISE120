@@ -1,5 +1,11 @@
 import { signInWithEmail, signUpWithEmail, signOut, signInWithGoogle, deleteAccount } from '../authService';
 import { supabase } from '../../lib/supabase';
+import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { loadDraft, saveDraft } from '../../onboarding/draft';
+
+jest.mock('@react-native-async-storage/async-storage', () =>
+  jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock')
+);
 
 jest.mock('../../lib/supabase', () => ({
   supabase: {
@@ -148,6 +154,50 @@ describe('authService', () => {
       await expect(deleteAccount()).rejects.toThrow('Could not delete account');
 
       expect(supabase.auth.signOut).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('review fixes', () => {
+    it('reports that email confirmation is needed when sign-up returns no session', async () => {
+      (supabase.auth.signUp as jest.Mock).mockResolvedValueOnce({ data: { user: { id: 'u3' }, session: null }, error: null });
+
+      await expect(signUpWithEmail('a@b.com', 'secret1')).resolves.toEqual({ needsConfirmation: true });
+    });
+
+    it('reports no confirmation needed when sign-up returns a session', async () => {
+      (supabase.auth.signUp as jest.Mock).mockResolvedValueOnce({
+        data: { user: { id: 'u3' }, session: { access_token: 'x' } },
+        error: null,
+      });
+
+      await expect(signUpWithEmail('a@b.com', 'secret1')).resolves.toEqual({ needsConfirmation: false });
+    });
+
+    it('returns quietly when the Google account picker is cancelled', async () => {
+      (GoogleSignin.signIn as jest.Mock).mockResolvedValueOnce({ type: 'cancelled', data: null });
+
+      await expect(signInWithGoogle()).resolves.toBeUndefined();
+
+      expect(supabase.auth.signInWithIdToken).not.toHaveBeenCalled();
+    });
+
+    it('clears the onboarding draft on sign out so it cannot reach the next account', async () => {
+      await saveDraft({ age: 30 }, 3);
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await signOut();
+
+      expect(await loadDraft()).toEqual({ draft: {}, step: 1 });
+    });
+
+    it('clears the onboarding draft when the account is deleted', async () => {
+      await saveDraft({ age: 30 }, 3);
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({ data: { deleted: true }, error: null });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await deleteAccount();
+
+      expect(await loadDraft()).toEqual({ draft: {}, step: 1 });
     });
   });
 });

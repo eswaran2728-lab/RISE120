@@ -4,6 +4,7 @@ import { Href, useLocalSearchParams, useRouter } from 'expo-router';
 import i18next, { t } from '../../src/i18n';
 import { tokens } from '../../src/theme/tokens';
 import { useSession } from '../../src/auth/useSession';
+import { signOut } from '../../src/auth/authService';
 import { clearDraft, loadDraft, OnboardingDraft, saveDraft } from '../../src/onboarding/draft';
 import { notifyOnboardingComplete } from '../../src/onboarding/completion';
 import { submitProfile } from '../../src/onboarding/submit';
@@ -310,6 +311,10 @@ export default function OnboardingStep() {
           )}
         </TouchableOpacity>
       </View>
+
+      <TouchableOpacity accessibilityRole="button" style={styles.signOut} onPress={() => void signOut()} disabled={submitting}>
+        <Text style={styles.signOutText}>{t('settings.signOut')}</Text>
+      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -355,4 +360,6 @@ const styles = StyleSheet.create({
   secondaryButton: { backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: '#2D3748' },
   secondaryButtonText: { color: tokens.color.text, fontSize: 16 },
   disabled: { opacity: 0.5 },
+  signOut: { minHeight: tokens.minTap, alignItems: 'center', justifyContent: 'center', marginTop: tokens.space[4] },
+  signOutText: { color: MUTED, fontSize: 16 },
 });

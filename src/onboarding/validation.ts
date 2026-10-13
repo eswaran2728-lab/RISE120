@@ -4,7 +4,7 @@ type BodyInput = { age: number; heightCm: number; weightKg: number };
 type BodyValidation = { ok: true } | { ok: false; field: BodyField; reason: 'min' | 'max' };
 
 // Phase 1 plan decision: adults only (18-80), height 120-230 cm, weight 30-300 kg.
-const BOUNDS: ReadonlyArray<{ field: BodyField; min: number; max: number }> = [
+const BOUNDS: readonly { field: BodyField; min: number; max: number }[] = [
   { field: 'age', min: 18, max: 80 },
   { field: 'heightCm', min: 120, max: 230 },
   { field: 'weightKg', min: 30, max: 300 },

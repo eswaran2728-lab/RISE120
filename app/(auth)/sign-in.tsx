@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { t } from '../../src/i18n';
+import { authErrorKey } from '../../src/auth/authErrors';
 import { tokens } from '../../src/theme/tokens';
 import { signInWithEmail, signInWithGoogle } from '../../src/auth/authService';
 
@@ -18,8 +19,8 @@ export default function SignInScreen() {
       setLoading(true);
       setErrorMessage(null);
       await signInWithEmail(email.trim(), password);
-    } catch (err: any) {
-      setErrorMessage(err?.message || t('errors.generic'));
+    } catch (err: unknown) {
+      setErrorMessage(t(authErrorKey(err)));
     } finally {
       setLoading(false);
     }
@@ -30,8 +31,8 @@ export default function SignInScreen() {
       setLoading(true);
       setErrorMessage(null);
       await signInWithGoogle();
-    } catch (err: any) {
-      setErrorMessage(err?.message || t('errors.generic'));
+    } catch (err: unknown) {
+      setErrorMessage(t(authErrorKey(err)));
     } finally {
       setLoading(false);
     }
