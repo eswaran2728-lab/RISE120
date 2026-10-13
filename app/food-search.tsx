@@ -227,6 +227,9 @@ export default function FoodSearchScreen() {
           </View>
         ) : null}
 
+        <TouchableOpacity accessibilityRole="button" style={styles.link} onPress={() => router.push('/food-scan' as Href)}>
+          <Text style={styles.linkText}>{t('food.search.scan')}</Text>
+        </TouchableOpacity>
         <TouchableOpacity accessibilityRole="button" style={styles.link} onPress={() => router.push('/food-edit' as Href)}>
           <Text style={styles.linkText}>{t('food.search.addOwn')}</Text>
         </TouchableOpacity>
