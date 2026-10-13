@@ -6,12 +6,12 @@ import { signOut } from '../src/auth/authService';
 import { tokens } from '../src/theme/tokens';
 import { useSession } from '../src/auth/useSession';
 import { supabase } from '../src/lib/supabase';
-import { onOnboardingComplete } from '../src/onboarding/completion';
+import { onOnboardingComplete, onPlanInputsSaved } from '../src/onboarding/completion';
 
 export default function RootLayout() {
   const { session, loading } = useSession();
   const [profileLoading, setProfileLoading] = useState(false);
-  const [onboarded, setOnboarded] = useState<{ userId: string; value: boolean } | null>(null);
+  const [onboarded, setOnboarded] = useState<{ userId: string; value: boolean; needsPlanInputs: boolean } | null>(null);
   const [profileError, setProfileError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const segments = useSegments();
@@ -30,7 +30,7 @@ export default function RootLayout() {
       try {
         const { data, error } = await supabase
           .from('profiles')
-          .select('onboarded_at, language')
+          .select('onboarded_at, language, energy_sex, activity_level')
           .eq('id', session.user.id)
           .maybeSingle();
         if (error) throw error;
@@ -38,7 +38,11 @@ export default function RootLayout() {
           void i18next.changeLanguage(data.language);
         }
         if (isMounted) {
-          setOnboarded({ userId: session.user.id, value: Boolean(data?.onboarded_at) });
+          setOnboarded({
+            userId: session.user.id,
+            value: Boolean(data?.onboarded_at),
+            needsPlanInputs: !data?.energy_sex || !data?.activity_level,
+          });
         }
       } catch {
         if (isMounted) {
@@ -58,12 +62,17 @@ export default function RootLayout() {
 
   const userId = session?.user?.id;
   useEffect(
-    () => onOnboardingComplete(() => userId && setOnboarded({ userId, value: true })),
+    () => onOnboardingComplete(() => userId && setOnboarded({ userId, value: true, needsPlanInputs: false })),
     [userId]
+  );
+  useEffect(
+    () => onPlanInputsSaved(() => setOnboarded((current) => (current ? { ...current, needsPlanInputs: false } : current))),
+    []
   );
 
   // The flag only counts for the user it was loaded for, so it cannot leak between accounts.
   const effectiveOnboarded = session && onboarded?.userId === session.user.id ? onboarded.value : null;
+  const needsPlanInputs = session && onboarded?.userId === session.user.id ? onboarded.needsPlanInputs : false;
   const effectiveProfileLoading = session ? profileLoading : false;
 
   useEffect(() => {
@@ -82,13 +91,17 @@ export default function RootLayout() {
         if (topSegment !== 'onboarding') {
           router.replace('/onboarding/1' as any);
         }
+      } else if (effectiveOnboarded === true && needsPlanInputs) {
+        if (topSegment !== 'plan-inputs') {
+          router.replace('/plan-inputs' as any);
+        }
       } else if (effectiveOnboarded === true) {
         if (inAuthGroup || (topSegment !== '(tabs)' && topSegment !== 'settings')) {
           router.replace('/(tabs)/today' as any);
         }
       }
     }
-  }, [session, loading, effectiveProfileLoading, profileError, effectiveOnboarded, segments, router]);
+  }, [session, loading, effectiveProfileLoading, profileError, effectiveOnboarded, needsPlanInputs, segments, router]);
 
   if (loading || effectiveProfileLoading) {
     return (

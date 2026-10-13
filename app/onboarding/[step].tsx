@@ -18,6 +18,8 @@ const EQUIPMENT = ['gym', 'home', 'none'] as const;
 const FOODS = ['halal', 'vegetarian', 'vegan', 'dairy_free', 'nut_free'] as const;
 const LANGUAGES = ['en', 'ms', 'ta'] as const;
 const UNITS = ['metric', 'imperial'] as const;
+const ENERGY_SEX = ['male', 'female', 'undisclosed'] as const;
+const ACTIVITY = ['sedentary', 'light', 'active'] as const;
 
 type Draft = Partial<OnboardingDraft>;
 type FieldErrors = Partial<Record<BodyField, string>>;
@@ -192,7 +194,7 @@ export default function OnboardingStep() {
 
   const canProceed =
     (step === 1 && !!draft.goal) ||
-    step === 2 ||
+    (step === 2 && !!draft.energySex && !!draft.activityLevel) ||
     (step === 3 && !!draft.trainingLevel) ||
     (step === 4 && !!draft.equipment) ||
     step === TOTAL_STEPS;
@@ -263,6 +265,10 @@ export default function OnboardingStep() {
               </>
             )}
           {field(t(units === 'metric' ? 'onboarding.fields.weight' : 'onboarding.fields.weightLb'), weightText, setWeightText, fieldErrors.weightKg)}
+          <Text style={styles.label}>{t('planInputs.sexLabel')}</Text>
+          {options(ENERGY_SEX, draft.energySex, 'planInputs.sexOptions', (energySex) => setDraft({ ...draft, energySex }))}
+          <Text style={styles.label}>{t('planInputs.activityLabel')}</Text>
+          {options(ACTIVITY, draft.activityLevel, 'planInputs.activityOptions', (activityLevel) => setDraft({ ...draft, activityLevel }))}
         </>
       )}
 

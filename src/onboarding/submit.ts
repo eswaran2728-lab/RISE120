@@ -24,6 +24,8 @@ export async function submitProfile(userId: string, draft: OnboardingDraft): Pro
       food_preferences: draft.foodPreferences,
       language: draft.language,
       units: draft.units,
+      energy_sex: draft.energySex,
+      activity_level: draft.activityLevel,
     },
     { onConflict: 'id' }
   );

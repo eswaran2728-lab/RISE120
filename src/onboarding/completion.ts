@@ -12,3 +12,16 @@ export function onOnboardingComplete(listener: () => void): () => void {
 export function notifyOnboardingComplete(): void {
   listeners.forEach((listener) => listener());
 }
+
+const planInputListeners = new Set<() => void>();
+
+export function onPlanInputsSaved(listener: () => void): () => void {
+  planInputListeners.add(listener);
+  return () => {
+    planInputListeners.delete(listener);
+  };
+}
+
+export function notifyPlanInputsSaved(): void {
+  planInputListeners.forEach((listener) => listener());
+}

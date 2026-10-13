@@ -21,6 +21,8 @@ const draft: OnboardingDraft = {
   foodPreferences: ['halal'],
   language: 'ms',
   units: 'metric',
+  energySex: 'undisclosed',
+  activityLevel: 'light',
 };
 
 const upsert = jest.fn();
@@ -62,6 +64,8 @@ describe('submitProfile', () => {
         food_preferences: ['halal'],
         language: 'ms',
         units: 'metric',
+        energy_sex: 'undisclosed',
+        activity_level: 'light',
       });
       expect(row).not.toHaveProperty('onboarded_at');
     }

@@ -10,6 +10,9 @@ export type OnboardingDraft = {
   foodPreferences: string[];
   language: 'en' | 'ms' | 'ta';
   units: 'metric' | 'imperial';
+  // Optional so drafts and profiles from before Phase 2 stay valid.
+  energySex?: 'male' | 'female' | 'undisclosed';
+  activityLevel?: 'sedentary' | 'light' | 'active';
 };
 
 type StoredDraft = { draft: Partial<OnboardingDraft>; step: number };

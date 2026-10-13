@@ -4,8 +4,9 @@ import RootLayout from '../../../app/_layout';
 import i18next from '../../i18n';
 import { supabase } from '../../lib/supabase';
 import { signOut } from '../authService';
-import { notifyOnboardingComplete } from '../../onboarding/completion';
+import { notifyOnboardingComplete, notifyPlanInputsSaved } from '../../onboarding/completion';
 
+const COMPLETE_PROFILE = { onboarded_at: '2026-10-12T00:00:00Z', energy_sex: 'male', activity_level: 'light' };
 const mockReplace = jest.fn();
 let mockSegments: string[] = [];
 let mockSession: { user: { id: string } } | null = { user: { id: 'u1' } };
@@ -65,7 +66,7 @@ describe('RootLayout profile lookup', () => {
   it('routes to today after a retry succeeds', async () => {
     mockProfileLookup({ data: null, error: { message: 'network request failed' } });
     const tree = await renderLayout();
-    mockProfileLookup({ data: { onboarded_at: '2026-10-12T00:00:00Z' }, error: null });
+    mockProfileLookup({ data: { ...COMPLETE_PROFILE }, error: null });
 
     await act(async () => {
       tree.root.findByProps({ testID: 'profile-retry' }).props.onPress();
@@ -88,7 +89,7 @@ describe('RootLayout profile lookup', () => {
 
   it('leaves an onboarded user on the settings screen', async () => {
     mockSegments = ['settings'];
-    mockProfileLookup({ data: { onboarded_at: '2026-10-12T00:00:00Z' }, error: null });
+    mockProfileLookup({ data: { ...COMPLETE_PROFILE }, error: null });
 
     await renderLayout();
 
@@ -96,7 +97,7 @@ describe('RootLayout profile lookup', () => {
   });
 
   it('does not reuse the previous account onboarded flag for the next sign-in', async () => {
-    mockProfileLookup({ data: { onboarded_at: '2026-10-12T00:00:00Z' }, error: null });
+    mockProfileLookup({ data: { ...COMPLETE_PROFILE }, error: null });
     const tree = await renderLayout();
     expect(mockReplace).toHaveBeenLastCalledWith('/(tabs)/today');
 
@@ -138,11 +139,36 @@ describe('RootLayout profile lookup', () => {
   });
 
   it('restores the saved language from the profile', async () => {
-    mockProfileLookup({ data: { onboarded_at: '2026-10-12T00:00:00Z', language: 'ms' }, error: null });
+    mockProfileLookup({ data: { ...COMPLETE_PROFILE, language: 'ms' }, error: null });
 
     await renderLayout();
 
     expect(i18next.language).toBe('ms');
     await i18next.changeLanguage('en');
+  });
+
+  it('sends an onboarded user with missing plan inputs to plan-inputs', async () => {
+    mockProfileLookup({
+      data: { onboarded_at: '2026-10-12T00:00:00Z', energy_sex: null, activity_level: null },
+      error: null,
+    });
+
+    await renderLayout();
+
+    expect(mockReplace).toHaveBeenLastCalledWith('/plan-inputs');
+  });
+
+  it('routes to today after the plan inputs are saved', async () => {
+    mockProfileLookup({
+      data: { onboarded_at: '2026-10-12T00:00:00Z', energy_sex: null, activity_level: null },
+      error: null,
+    });
+    await renderLayout();
+
+    await act(async () => {
+      notifyPlanInputsSaved();
+    });
+
+    expect(mockReplace).toHaveBeenLastCalledWith('/(tabs)/today');
   });
 });
