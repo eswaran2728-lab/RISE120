@@ -61,7 +61,7 @@ Migrations are in `supabase/migrations/` (`0001_core.sql` tables, `0002_rls.sql`
 
 `OFF_CONTACT` is a real contact email or URL that Open Food Facts can reach; it goes in the User-Agent (`Rise120/1.0 (contact)`). Open Food Facts allows about 15 product lookups per minute per IP, and the function's outbound IP is shared by all users, so heavy use may hit that limit.
 
-**Migration added in Phase 3:** `food_model_provenance` (provenance columns, uniqueness, search index, and the safer delete rule). Apply with `npx supabase db push`.
+**Migrations added in Phase 3:** `food_model_provenance` (provenance columns, uniqueness, search index, and the safer delete rule) and `food_logs_food_visibility` (a meal log may only reference a shared food or the caller's own food, enforced by the database for inserts, upserts and updates). Apply with `npx supabase db push`.
 
 ### Phase 3 open gates
 
