@@ -10,7 +10,7 @@ import { onOnboardingComplete } from '../src/onboarding/completion';
 export default function RootLayout() {
   const { session, loading } = useSession();
   const [profileLoading, setProfileLoading] = useState(false);
-  const [onboarded, setOnboarded] = useState<boolean | null>(null);
+  const [onboarded, setOnboarded] = useState<{ userId: string; value: boolean } | null>(null);
   const [profileError, setProfileError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const segments = useSegments();
@@ -34,7 +34,7 @@ export default function RootLayout() {
           .single();
         if (error) throw error;
         if (isMounted) {
-          setOnboarded(Boolean(data?.onboarded_at));
+          setOnboarded({ userId: session.user.id, value: Boolean(data?.onboarded_at) });
         }
       } catch {
         if (isMounted) {
@@ -52,9 +52,14 @@ export default function RootLayout() {
     };
   }, [session?.user?.id, attempt]);
 
-  useEffect(() => onOnboardingComplete(() => setOnboarded(true)), []);
+  const userId = session?.user?.id;
+  useEffect(
+    () => onOnboardingComplete(() => userId && setOnboarded({ userId, value: true })),
+    [userId]
+  );
 
-  const effectiveOnboarded = session ? onboarded : null;
+  // The flag only counts for the user it was loaded for, so it cannot leak between accounts.
+  const effectiveOnboarded = session && onboarded?.userId === session.user.id ? onboarded.value : null;
   const effectiveProfileLoading = session ? profileLoading : false;
 
   useEffect(() => {
@@ -74,7 +79,7 @@ export default function RootLayout() {
           router.replace('/onboarding/1' as any);
         }
       } else if (effectiveOnboarded === true) {
-        if (inAuthGroup || topSegment !== '(tabs)') {
+        if (inAuthGroup || (topSegment !== '(tabs)' && topSegment !== 'settings')) {
           router.replace('/(tabs)/today' as any);
         }
       }

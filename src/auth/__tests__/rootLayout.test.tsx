@@ -5,17 +5,19 @@ import { supabase } from '../../lib/supabase';
 import { notifyOnboardingComplete } from '../../onboarding/completion';
 
 const mockReplace = jest.fn();
+let mockSegments: string[] = [];
+let mockSession: { user: { id: string } } | null = { user: { id: 'u1' } };
 
 jest.mock('expo-router', () => ({
   DarkTheme: {},
   Stack: () => null,
   ThemeProvider: ({ children }: { children: React.ReactNode }) => children,
   useRouter: () => ({ replace: mockReplace }),
-  useSegments: () => [],
+  useSegments: () => mockSegments,
 }));
 
 jest.mock('../useSession', () => ({
-  useSession: () => ({ session: { user: { id: 'u1' } }, loading: false }),
+  useSession: () => ({ session: mockSession, loading: false }),
 }));
 
 jest.mock('../../lib/supabase', () => ({
@@ -40,6 +42,8 @@ async function renderLayout(): Promise<ReactTestRenderer> {
 describe('RootLayout profile lookup', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSegments = [];
+    mockSession = { user: { id: 'u1' } };
   });
 
   it.each([
@@ -76,5 +80,37 @@ describe('RootLayout profile lookup', () => {
     });
 
     expect(mockReplace).toHaveBeenLastCalledWith('/(tabs)/today');
+  });
+
+  it('leaves an onboarded user on the settings screen', async () => {
+    mockSegments = ['settings'];
+    mockProfileLookup({ data: { onboarded_at: '2026-10-12T00:00:00Z' }, error: null });
+
+    await renderLayout();
+
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('does not reuse the previous account onboarded flag for the next sign-in', async () => {
+    mockProfileLookup({ data: { onboarded_at: '2026-10-12T00:00:00Z' }, error: null });
+    const tree = await renderLayout();
+    expect(mockReplace).toHaveBeenLastCalledWith('/(tabs)/today');
+
+    mockSession = null;
+    await act(async () => {
+      tree.update(<RootLayout />);
+    });
+    expect(mockReplace).toHaveBeenLastCalledWith('/(auth)/sign-in');
+
+    mockReplace.mockClear();
+    (supabase.from as jest.Mock).mockReturnValueOnce({
+      select: () => ({ eq: () => ({ single: () => new Promise(() => {}) }) }),
+    });
+    mockSession = { user: { id: 'u2' } };
+    await act(async () => {
+      tree.update(<RootLayout />);
+    });
+
+    expect(mockReplace).not.toHaveBeenCalledWith('/(tabs)/today');
   });
 });

@@ -1,4 +1,4 @@
-import { signInWithEmail, signUpWithEmail, signOut, signInWithGoogle } from '../authService';
+import { signInWithEmail, signUpWithEmail, signOut, signInWithGoogle, deleteAccount } from '../authService';
 import { supabase } from '../../lib/supabase';
 
 jest.mock('../../lib/supabase', () => ({
@@ -9,6 +9,7 @@ jest.mock('../../lib/supabase', () => ({
       signOut: jest.fn(),
       signInWithIdToken: jest.fn(),
     },
+    functions: { invoke: jest.fn() },
   },
 }));
 
@@ -124,6 +125,29 @@ describe('authService', () => {
       });
 
       await expect(signInWithGoogle()).rejects.toThrow('Google sign in failed');
+    });
+  });
+
+  describe('deleteAccount', () => {
+    it('invokes the delete-account function, then signs out locally', async () => {
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({ data: { deleted: true }, error: null });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await deleteAccount();
+
+      expect(supabase.functions.invoke).toHaveBeenCalledWith('delete-account', { method: 'POST' });
+      expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    });
+
+    it('throws and keeps the session when the function returns an error', async () => {
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({
+        data: null,
+        error: { message: 'Could not delete account' },
+      });
+
+      await expect(deleteAccount()).rejects.toThrow('Could not delete account');
+
+      expect(supabase.auth.signOut).not.toHaveBeenCalled();
     });
   });
 });

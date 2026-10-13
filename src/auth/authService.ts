@@ -48,3 +48,12 @@ export async function signOut(): Promise<void> {
     throw new Error(error.message);
   }
 }
+
+export async function deleteAccount(): Promise<void> {
+  const { error } = await supabase.functions.invoke('delete-account', { method: 'POST' });
+  if (error) {
+    throw new Error(error.message);
+  }
+  // The auth user is gone server-side, so only clear the local session.
+  await supabase.auth.signOut({ scope: 'local' });
+}

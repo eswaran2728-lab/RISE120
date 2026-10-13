@@ -1,9 +1,11 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { t } from '../../src/i18n';
+import { useLanguage } from '../../src/i18n/useLanguage';
 import { tokens } from '../../src/theme/tokens';
 
 export default function TabsLayout() {
+  useLanguage();
   return (
     <Tabs
       screenOptions={{
