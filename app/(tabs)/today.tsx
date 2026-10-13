@@ -168,6 +168,9 @@ export default function TodayScreen() {
             <Text style={styles.listItem}>{`${t('today.calories')}: ${today.calorieTarget} ${t('today.kcal')}`}</Text>
           )}
           {today.proteinTargetG !== null ? <Text style={styles.listItem}>{`${t('today.protein')}: ${today.proteinTargetG} g`}</Text> : null}
+          <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => router.navigate('/(tabs)/food' as Href)}>
+            <Text style={styles.linkText}>{t('today.logFood')}</Text>
+          </TouchableOpacity>
           <Text style={styles.disclaimer}>{t('health.disclaimer')}</Text>
         </View>
 
