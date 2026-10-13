@@ -1,0 +1,21 @@
+id,name_en,alias_en,alias_ms,alias_ta,region,serving_amount,serving_unit,serving_desc,calories,protein_g,carbs_g,fat_g,source_name,source_url,source_record_id,accessed_on,reuse_permission_evidence,reviewer,verdict,notes
+nasi-lemak,Nasi lemak,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+roti-canai,Roti canai,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+nasi-goreng-kampung,Nasi goreng kampung,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+mee-goreng-mamak,Mee goreng mamak,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+char-kway-teow,Char kway teow,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+asam-laksa,Asam laksa,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+curry-laksa,Curry laksa,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+chicken-satay,Chicken satay,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Say whether the serving includes the peanut sauce.
+hainanese-chicken-rice,Hainanese chicken rice,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+nasi-kandar,Nasi kandar,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Values vary greatly with the dishes chosen; define a standard plate first.
+teh-tarik,Teh tarik,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Say whether it is with sugar and condensed milk.
+kopi-o,Kopi O,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Say whether it is with sugar.
+thosai,Thosai,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Tamil name must come from a reviewer.
+idli,Idli,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Tamil name must come from a reviewer.
+chapati,Chapati,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Tamil name must come from a reviewer.
+vadai,Vadai,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Tamil name must come from a reviewer.
+cendol,Cendol,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+bak-kut-teh,Bak kut teh,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+mee-rebus,Mee rebus,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
+kuih-seri-muka,Kuih seri muka,,,,MY,,,,,,,,,,,,,,unreviewed,Name only. Serving size; values; aliases and source still needed.
