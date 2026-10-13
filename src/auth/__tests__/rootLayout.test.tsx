@@ -188,7 +188,7 @@ describe('RootLayout profile lookup', () => {
     expect(useSync).toHaveBeenCalledWith('u1');
   });
 
-  it.each(['plan-preview', 'checkin'])('leaves an onboarded user on the %s screen', async (segment) => {
+  it.each(['plan-preview', 'checkin', 'food-edit'])('leaves an onboarded user on the %s screen', async (segment) => {
     mockSegments = [segment];
     mockProfileLookup({ data: { ...COMPLETE_PROFILE }, error: null });
 
