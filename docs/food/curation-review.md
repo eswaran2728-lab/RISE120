@@ -50,6 +50,20 @@ Keep the reply. Paste its reference (date, name, ticket number) into `reuse_perm
 3. Who reviews the Malay and Tamil names.
 4. Edits to the 20 candidate foods, and what a "standard plate" means for mixed dishes such as nasi kandar.
 
+## Open Food Facts reuse decision (needed from you)
+
+Open Food Facts publishes its database under the Open Database Licence (ODbL), the individual contents under the Database Contents Licence (DbCL), and product images under CC BY-SA. In plain terms: you may use it, including commercially, but you must **credit Open Food Facts and name the licence with a link**, and **derivative or combined databases must be shared under the same terms (share-alike)**. Being able to call its API is not permission to merge its data into a database you do not want to share.
+
+Today Rise120 only **looks products up and shows them with their source, never stores or logs them**. The scan screen already shows the attribution. The options:
+
+| Option | What it means | Obligations |
+| --- | --- | --- |
+| A. Stay read-only (current) | Scanning shows a source-labelled preview; users add their own food instead. | Attribution on the scan screen (done). No share-alike exposure. |
+| B. Let users log scanned products into their own private foods | Each logged product is copied into that user's private data. | Needs advice on whether that is a derivative database; keep OFF-derived rows isolated by source id so they can be exported or removed. |
+| C. Merge into the shared food database | OFF products become shared rows searchable by everyone. | Share-alike likely applies to the combined database; do not choose without legal advice. |
+
+I have kept the app on option A. Tell me which option you choose; for B or C I will write the failing offline-replay tests first, keep the rows isolated and auditable by source id, and add the attribution text, but only after your decision.
+
 ## What closes the gate
 
 Phase 3 is not complete until: a reviewed, rights-cleared seed is approved and deployed; the Open Food Facts reuse decision is made; and the final cross-phase phone checks pass.
