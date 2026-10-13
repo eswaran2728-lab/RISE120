@@ -4,6 +4,7 @@ import RootLayout from '../../../app/_layout';
 import i18next from '../../i18n';
 import { supabase } from '../../lib/supabase';
 import { signOut } from '../authService';
+import { useSync } from '../../sync/useSync';
 import { notifyOnboardingComplete, notifyPlanInputsSaved } from '../../onboarding/completion';
 
 const COMPLETE_PROFILE = { onboarded_at: '2026-10-12T00:00:00Z', energy_sex: 'male', activity_level: 'light' };
@@ -23,6 +24,7 @@ jest.mock('../useSession', () => ({
   useSession: () => ({ session: mockSession, loading: false }),
 }));
 
+jest.mock('../../sync/useSync', () => ({ useSync: jest.fn() }));
 jest.mock('../authService', () => ({ signOut: jest.fn().mockResolvedValue(undefined) }));
 
 jest.mock('../../lib/supabase', () => ({
@@ -170,5 +172,13 @@ describe('RootLayout profile lookup', () => {
     });
 
     expect(mockReplace).toHaveBeenLastCalledWith('/(tabs)/today');
+  });
+
+  it('runs the offline sync for the signed-in user only', async () => {
+    mockProfileLookup({ data: { ...COMPLETE_PROFILE }, error: null });
+
+    await renderLayout();
+
+    expect(useSync).toHaveBeenCalledWith('u1');
   });
 });

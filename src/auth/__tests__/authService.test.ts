@@ -2,6 +2,7 @@ import { signInWithEmail, signUpWithEmail, signOut, signInWithGoogle, deleteAcco
 import { supabase } from '../../lib/supabase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { loadDraft, saveDraft } from '../../onboarding/draft';
+import { enqueue, listPending } from '../../sync/queue';
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -14,6 +15,7 @@ jest.mock('../../lib/supabase', () => ({
       signUp: jest.fn(),
       signOut: jest.fn(),
       signInWithIdToken: jest.fn(),
+      getSession: jest.fn(),
     },
     functions: { invoke: jest.fn() },
   },
@@ -33,6 +35,7 @@ jest.mock('@react-native-google-signin/google-signin', () => ({
 describe('authService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (supabase.auth.getSession as jest.Mock).mockResolvedValue({ data: { session: null } });
   });
 
   describe('signInWithEmail', () => {
@@ -198,6 +201,33 @@ describe('authService', () => {
       await deleteAccount();
 
       expect(await loadDraft()).toEqual({ draft: {}, step: 1 });
+    });
+  });
+
+  describe('pending offline data', () => {
+    const pendingSet = (id: string) =>
+      ({ kind: 'workout_set', id, date: '2026-10-13', exerciseId: 'e', setNumber: 1, reps: 5, weightKg: 10, updatedAt: 1 }) as const;
+
+    it('removes the deleted account pending data but not another account', async () => {
+      await enqueue('u1', pendingSet('s1'));
+      await enqueue('u2', pendingSet('s2'));
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({ data: { deleted: true }, error: null });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await deleteAccount();
+
+      expect(await listPending('u1')).toEqual([]);
+      expect(await listPending('u2')).toHaveLength(1);
+    });
+
+    it('keeps pending data on sign out so offline entries sync after the next sign-in', async () => {
+      await enqueue('u1', pendingSet('s1'));
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await signOut();
+
+      expect(await listPending('u1')).toHaveLength(1);
     });
   });
 });

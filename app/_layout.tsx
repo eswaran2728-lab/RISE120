@@ -3,6 +3,7 @@ import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { DarkTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-router';
 import i18next, { t } from '../src/i18n';
 import { signOut } from '../src/auth/authService';
+import { useSync } from '../src/sync/useSync';
 import { tokens } from '../src/theme/tokens';
 import { useSession } from '../src/auth/useSession';
 import { supabase } from '../src/lib/supabase';
@@ -61,6 +62,7 @@ export default function RootLayout() {
   }, [session?.user?.id, attempt]);
 
   const userId = session?.user?.id;
+  useSync(userId);
   useEffect(
     () => onOnboardingComplete(() => userId && setOnboarded({ userId, value: true, needsPlanInputs: false })),
     [userId]
