@@ -3,6 +3,7 @@
   "compilerOptions": {
     "strict": true,
     "types": ["jest", "node"],
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": [
         "./*"
