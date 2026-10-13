@@ -25,7 +25,8 @@ describe('exercise library seed (live)', () => {
     const { data, error } = await admin.from('exercises').select('name, muscle_group, instructions').eq('equipment', equipment);
 
     expect(error).toBeNull();
-    const rows = data ?? [];
+    // Other suites may insert temporary rows with other patterns, so check only the five patterns.
+    const rows = (data ?? []).filter((r) => PATTERNS.includes(r.muscle_group));
     expect(rows).toHaveLength(5);
     for (const [index, name] of EXPECTED[equipment].entries()) {
       const row = rows.find((r) => r.muscle_group === PATTERNS[index]);
@@ -37,7 +38,7 @@ describe('exercise library seed (live)', () => {
   it('lets a signed-in user read exercises but not change them', async () => {
     const read = await user.client.from('exercises').select('id').eq('equipment', 'gym');
     expect(read.error).toBeNull();
-    expect((read.data ?? []).length).toBe(5);
+    expect((read.data ?? []).length).toBeGreaterThanOrEqual(5);
 
     const insert = await user.client
       .from('exercises')
