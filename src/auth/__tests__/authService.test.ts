@@ -5,6 +5,7 @@ import { loadDraft, saveDraft } from '../../onboarding/draft';
 import { enqueue, listPending } from '../../sync/queue';
 import { removeLocalPhotos } from '../../checkin/photos';
 import { readCache, writeCache } from '../../cache/userCache';
+import { recentFoods, rememberFoods } from '../../food/cache';
 
 jest.mock('../../checkin/photos', () => ({ removeLocalPhotos: jest.fn() }));
 
@@ -238,6 +239,20 @@ describe('authService', () => {
       expect(await readCache('u1', 'plan')).toBeNull();
       expect(await readCache('u1', 'profile')).toBeNull();
       expect(await readCache('u2', 'plan')).toEqual({ x: 3 });
+    });
+
+    it('removes the deleted account recent foods but not another account', async () => {
+      const food = { id: 'f1', userId: null, name: 'Apple', aliases: {}, servingDesc: '1', calories: 52, proteinG: 0.3, carbsG: 14, fatG: 0.2, source: 'usda', verified: false, region: null, sourceId: null, barcode: null };
+      await rememberFoods('u1', [food]);
+      await rememberFoods('u2', [food]);
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({ data: { deleted: true }, error: null });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await deleteAccount();
+
+      expect(await recentFoods('u1')).toEqual([]);
+      expect(await recentFoods('u2')).toHaveLength(1);
     });
 
     it('still signs out locally if clearing local photos throws', async () => {

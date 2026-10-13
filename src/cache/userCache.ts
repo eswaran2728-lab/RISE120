@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Small per-user cache of what the app last read from the server (plan, profile flags, today's
 // synced sets), so the app still works at the gym with no signal. Never shared between accounts.
-export type CacheName = 'plan' | 'profile' | 'units' | 'sets' | 'checkins';
-const NAMES: CacheName[] = ['plan', 'profile', 'units', 'sets', 'checkins'];
+export type CacheName = 'plan' | 'profile' | 'units' | 'sets' | 'checkins' | 'recentFoods';
+const NAMES: CacheName[] = ['plan', 'profile', 'units', 'sets', 'checkins', 'recentFoods'];
 
 const keyFor = (userId: string, name: CacheName) => `rise120.cache.${userId}.${name}`;
 
