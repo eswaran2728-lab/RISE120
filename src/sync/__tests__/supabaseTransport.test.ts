@@ -2,7 +2,7 @@ import { supabase } from '../../lib/supabase';
 import { supabaseTransport } from '../supabaseTransport';
 import { localPhotoExists, uploadCheckinPhoto } from '../../checkin/photos';
 import { clearPhotoUri } from '../queue';
-import type { CheckinOperation, WorkoutSetOperation } from '../types';
+import type { CheckinOperation, FoodLogOperation, WorkoutSetOperation } from '../types';
 
 jest.mock('../queue', () => ({ clearPhotoUri: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../../checkin/photos', () => ({
@@ -131,6 +131,66 @@ describe('supabaseTransport', () => {
 
       expect(uploadCheckinPhoto).not.toHaveBeenCalled();
       expect(upsert.mock.calls[0][0]).not.toHaveProperty('photo_path');
+    });
+  });
+
+  describe('food logs', () => {
+    const log: FoodLogOperation = {
+      kind: 'food_log', id: 'log-1', date: '2026-10-13', foodId: 'food-1', quantity: 1.5, mealType: 'dinner',
+      deleted: false, food: null, updatedAt: 1,
+    };
+    const deleteEq = jest.fn();
+    const deleteChain: { eq: jest.Mock } = { eq: jest.fn() };
+
+    beforeEach(() => {
+      deleteEq.mockReset();
+      deleteChain.eq.mockReset();
+      deleteChain.eq.mockImplementation((column: string, value: unknown) => {
+        deleteEq(column, value);
+        return deleteEq.mock.calls.length >= 2 ? Promise.resolve({ error: null }) : deleteChain;
+      });
+      (supabase.from as jest.Mock).mockReturnValue({ upsert, delete: () => deleteChain });
+    });
+
+    it('upserts the log on its stable id', async () => {
+      await supabaseTransport.upsertFoodLog('A', log);
+
+      expect(supabase.from).toHaveBeenCalledWith('food_logs');
+      expect(upsert).toHaveBeenCalledWith(
+        { id: 'log-1', user_id: 'A', log_date: '2026-10-13', food_id: 'food-1', quantity: 1.5, meal_type: 'dinner' },
+        { onConflict: 'id' }
+      );
+    });
+
+    it('deletes by log id and owner only', async () => {
+      await supabaseTransport.deleteFoodLog('A', { ...log, deleted: true });
+
+      expect(deleteEq.mock.calls).toEqual([['id', 'log-1'], ['user_id', 'A']]);
+    });
+
+    it('refuses to send when a different account is signed in', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValue({ data: { session: { user: { id: 'B' } } } });
+
+      await expect(supabaseTransport.upsertFoodLog('A', log)).rejects.toThrow();
+      await expect(supabaseTransport.deleteFoodLog('A', log)).rejects.toThrow();
+
+      expect(upsert).not.toHaveBeenCalled();
+      expect(deleteEq).not.toHaveBeenCalled();
+    });
+
+    it('throws the database error so the operation stays queued', async () => {
+      upsert.mockResolvedValue({ error: { message: 'Network request failed' } });
+
+      await expect(supabaseTransport.upsertFoodLog('A', log)).rejects.toThrow('Network request failed');
+    });
+
+    it('throws a delete error so the tombstone stays queued', async () => {
+      deleteChain.eq.mockImplementation((column: string, value: unknown) => {
+        deleteEq(column, value);
+        return deleteEq.mock.calls.length >= 2 ? Promise.resolve({ error: { message: 'Network request failed' } }) : deleteChain;
+      });
+
+      await expect(supabaseTransport.deleteFoodLog('A', log)).rejects.toThrow('Network request failed');
     });
   });
 });

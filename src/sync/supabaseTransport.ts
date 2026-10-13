@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { localPhotoExists, removeLocalPhoto, uploadCheckinPhoto } from '../checkin/photos';
 import { clearPhotoUri } from './queue';
-import type { CheckinOperation, SyncTransport, WorkoutSetOperation } from './types';
+import type { CheckinOperation, FoodLogOperation, SyncTransport, WorkoutSetOperation } from './types';
 
 // Belt and braces: the queue is already per user, and row-level security rejects a foreign
 // user_id, but never even attempt to send A's data while B is signed in.
@@ -25,6 +25,29 @@ export const supabaseTransport: SyncTransport = {
       },
       { onConflict: 'id' }
     );
+    if (error) throw new Error(error.message);
+  },
+
+  async upsertFoodLog(userId: string, op: FoodLogOperation): Promise<void> {
+    await assertSignedInAs(userId);
+    const { error } = await supabase.from('food_logs').upsert(
+      {
+        id: op.id,
+        user_id: userId,
+        log_date: op.date,
+        food_id: op.foodId,
+        quantity: op.quantity,
+        meal_type: op.mealType,
+      },
+      { onConflict: 'id' }
+    );
+    if (error) throw new Error(error.message);
+  },
+
+  // Deleting a row that is already gone is not an error, so a replayed delete is safe.
+  async deleteFoodLog(userId: string, op: FoodLogOperation): Promise<void> {
+    await assertSignedInAs(userId);
+    const { error } = await supabase.from('food_logs').delete().eq('id', op.id).eq('user_id', userId);
     if (error) throw new Error(error.message);
   },
 

@@ -11,6 +11,7 @@ async function run(userId: string, transport: SyncTransport): Promise<SyncResult
   for (const op of operations) {
     try {
       if (op.kind === 'workout_set') await transport.upsertWorkoutSet(userId, op);
+      else if (op.kind === 'food_log') await (op.deleted ? transport.deleteFoodLog(userId, op) : transport.upsertFoodLog(userId, op));
       else await transport.upsertCheckin(userId, op);
       await removeIfUnchanged(userId, op);
       synced += 1;

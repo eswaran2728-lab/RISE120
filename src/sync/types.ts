@@ -1,3 +1,5 @@
+import type { Food, MealType } from '../food/types';
+
 export type LocalDate = string; // YYYY-MM-DD in the device's local calendar
 
 interface OperationBase {
@@ -24,11 +26,26 @@ export interface CheckinOperation extends OperationBase {
   photoUri: string | null; // local file until the upload succeeds (Task 6)
 }
 
-export type PendingOperation = WorkoutSetOperation | CheckinOperation;
+// A meal log. `deleted: true` is a tombstone: it stays queued until the server confirms the delete,
+// so a delete made offline replays. `food` is a snapshot so the log can be shown before it syncs.
+export interface FoodLogOperation extends OperationBase {
+  kind: 'food_log';
+  id: string; // client-generated UUID, used as food_logs.id so a replay cannot duplicate
+  date: LocalDate;
+  foodId: string;
+  quantity: number; // number of listed servings
+  mealType: MealType;
+  deleted: boolean;
+  food: Food | null;
+}
+
+export type PendingOperation = WorkoutSetOperation | CheckinOperation | FoodLogOperation;
 
 export interface SyncTransport {
   upsertWorkoutSet(userId: string, op: WorkoutSetOperation): Promise<void>;
   upsertCheckin(userId: string, op: CheckinOperation): Promise<void>;
+  upsertFoodLog(userId: string, op: FoodLogOperation): Promise<void>;
+  deleteFoodLog(userId: string, op: FoodLogOperation): Promise<void>;
 }
 
 export interface SyncResult {

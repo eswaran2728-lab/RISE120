@@ -135,4 +135,16 @@ describe('food model, provenance and RLS (live)', () => {
     expect(error).toBeNull();
     expect((await admin.from('foods').select('id').eq('id', food!.id)).data).toEqual([]);
   });
+
+  it('does not let another user edit or delete my custom food', async () => {
+    const { data: mine } = await ownFood(a, { name: `Mine ${suffix}` });
+
+    const updated = await b.client.from('foods').update({ name: 'Hacked' }).eq('id', mine!.id).select();
+    const deleted = await b.client.from('foods').delete().eq('id', mine!.id).select();
+
+    expect(updated.data ?? []).toEqual([]);
+    expect(deleted.data ?? []).toEqual([]);
+    const { data: still } = await admin.from('foods').select('name').eq('id', mine!.id).single();
+    expect(still?.name).toBe(`Mine ${suffix}`);
+  });
 });

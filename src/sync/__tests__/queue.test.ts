@@ -1,6 +1,6 @@
 import { mockStore } from '../testing/storageMock';
-import { clearPending, clearPhotoUri, enqueue, listPending } from '../queue';
-import type { CheckinOperation, WorkoutSetOperation } from '../types';
+import { clearPending, clearPhotoUri, enqueue, listPending, removeIfUnchanged } from '../queue';
+import type { CheckinOperation, FoodLogOperation, WorkoutSetOperation } from '../types';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
@@ -15,6 +15,19 @@ const workoutSet = (overrides: Partial<WorkoutSetOperation> = {}): WorkoutSetOpe
   setNumber: 1,
   reps: 10,
   weightKg: 20,
+  updatedAt: 1000,
+  ...overrides,
+});
+
+const foodLog = (id: string, overrides: Partial<FoodLogOperation> = {}): FoodLogOperation => ({
+  kind: 'food_log',
+  id,
+  date: '2026-10-13',
+  foodId: 'food-1',
+  quantity: 1,
+  mealType: 'lunch',
+  deleted: false,
+  food: null,
   updatedAt: 1000,
   ...overrides,
 });
@@ -120,5 +133,54 @@ describe('offline queue', () => {
 
     await clearPhotoUri('A', '2026-10-13', 'file:///docs/new.jpg');
     expect((await listPending('A'))[0]).toMatchObject({ photoUri: null, updatedAt: 1000 });
+  });
+
+  describe('food logs', () => {
+    it('keeps one pending operation per log id and lets the latest edit win', async () => {
+      await enqueue('A', foodLog('log-1', { quantity: 1, updatedAt: 1000 }));
+      await enqueue('A', foodLog('log-1', { quantity: 2, updatedAt: 2000 }));
+      await enqueue('A', foodLog('log-1', { quantity: 9, updatedAt: 1500 }));
+
+      const pending = await listPending('A');
+      expect(pending).toHaveLength(1);
+      expect(pending[0]).toMatchObject({ quantity: 2 });
+    });
+
+    it('lets a delete tombstone replace an earlier add of the same log', async () => {
+      await enqueue('A', foodLog('log-1', { updatedAt: 1000 }));
+      await enqueue('A', foodLog('log-1', { deleted: true, updatedAt: 2000 }));
+
+      expect(await listPending('A')).toEqual([expect.objectContaining({ id: 'log-1', deleted: true })]);
+    });
+
+    it('keeps different logs separate and survives a restart', async () => {
+      await enqueue('A', foodLog('log-1'));
+      await enqueue('A', foodLog('log-2'));
+
+      let reloaded!: typeof import('../queue');
+      jest.isolateModules(() => {
+        reloaded = jest.requireActual('../queue');
+      });
+
+      expect((await reloaded.listPending('A')).map((op) => op.kind === 'food_log' && op.id)).toEqual(['log-1', 'log-2']);
+    });
+
+    it('removes a synced food log unless it was edited while being sent', async () => {
+      await enqueue('A', foodLog('log-1', { updatedAt: 1000 }));
+      await enqueue('A', foodLog('log-1', { quantity: 5, updatedAt: 2000 }));
+
+      await removeIfUnchanged('A', foodLog('log-1', { updatedAt: 1000 }));
+
+      expect(await listPending('A')).toHaveLength(1);
+      await removeIfUnchanged('A', foodLog('log-1', { quantity: 5, updatedAt: 2000 }));
+      expect(await listPending('A')).toEqual([]);
+    });
+
+    it('does not mix a food log id with a workout set that has the same id', async () => {
+      await enqueue('A', workoutSet({ id: 'same' }));
+      await enqueue('A', foodLog('same'));
+
+      expect(await listPending('A')).toHaveLength(2);
+    });
   });
 });

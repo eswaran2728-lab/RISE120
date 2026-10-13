@@ -29,8 +29,11 @@ async function write(userId: string, operations: PendingOperation[]): Promise<vo
 }
 
 // Two operations with the same key describe the same server row.
-export const operationKey = (op: PendingOperation): string =>
-  op.kind === 'workout_set' ? `set:${op.id}` : `checkin:${op.date}`;
+export const operationKey = (op: PendingOperation): string => {
+  if (op.kind === 'workout_set') return `set:${op.id}`;
+  if (op.kind === 'food_log') return `food:${op.id}`;
+  return `checkin:${op.date}`;
+};
 
 export function enqueue(userId: string, op: PendingOperation): Promise<void> {
   return withLock(userId, async () => {
