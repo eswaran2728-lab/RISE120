@@ -1,6 +1,7 @@
 import { mockStore } from '../../sync/testing/storageMock';
 import { supabase } from '../../lib/supabase';
-import { recentFoods } from '../cache';
+import { enqueue } from '../../sync/queue';
+import { recentFoods, rememberFoods } from '../cache';
 import { createCustomFood, CustomFoodError, deleteCustomFood, getOwnCustomFood, updateCustomFood } from '../custom';
 import type { FoodFields } from '../types';
 
@@ -222,5 +223,70 @@ describe('getOwnCustomFood', () => {
     maybeSingle.mockResolvedValue({ data: null, error: null });
 
     expect(await getOwnCustomFood('u1', 'nope')).toBeNull();
+  });
+});
+
+describe('custom food history is preserved', () => {
+  beforeEach(() => {
+    mockStore.clear();
+    jest.clearAllMocks();
+  });
+
+  const pendingLog = (deleted: boolean) => ({
+    kind: 'food_log' as const, id: 'log-1', date: '2026-10-13', foodId: 'food-1', quantity: 1, mealType: 'lunch' as const, deleted, food: null, updatedAt: 1,
+  });
+
+  it('refuses to edit a food that logged meals reference, so past days keep their totals', async () => {
+    const calls = mockTables({ logCount: 2 });
+
+    await expect(updateCustomFood('u1', 'food-1', fields)).rejects.toMatchObject({ code: 'in_use' });
+
+    expect(calls.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to edit a food that a not-yet-synced meal references', async () => {
+    const calls = mockTables({ logCount: 0 });
+    await enqueue('u1', pendingLog(false));
+
+    await expect(updateCustomFood('u1', 'food-1', fields)).rejects.toMatchObject({ code: 'in_use' });
+
+    expect(calls.update).not.toHaveBeenCalled();
+  });
+
+  it('refuses to delete a food that a not-yet-synced meal references, so the meal can still sync', async () => {
+    const calls = mockTables({ logCount: 0 });
+    await enqueue('u1', pendingLog(false));
+
+    await expect(deleteCustomFood('u1', 'food-1')).rejects.toMatchObject({ code: 'in_use' });
+
+    expect(calls.delete).not.toHaveBeenCalled();
+  });
+
+  it('allows an edit or delete when the only pending entry is a delete tombstone', async () => {
+    const calls = mockTables({ logCount: 0 });
+    await enqueue('u1', pendingLog(true));
+
+    await expect(updateCustomFood('u1', 'food-1', fields)).resolves.toBeDefined();
+    await expect(deleteCustomFood('u1', 'food-1')).resolves.toBeUndefined();
+    expect(calls.update).toHaveBeenCalled();
+    expect(calls.delete).toHaveBeenCalled();
+  });
+
+  it('ignores another account pending meals', async () => {
+    mockTables({ logCount: 0 });
+    await enqueue('u2', pendingLog(false));
+
+    await expect(deleteCustomFood('u1', 'food-1')).resolves.toBeUndefined();
+  });
+
+  it('removes a deleted food from the recent foods used for offline search', async () => {
+    mockTables({ logCount: 0 });
+    const food = { ...(await createCustomFood('u1', fields)) };
+    await rememberFoods('u1', [food]);
+    expect((await recentFoods('u1')).map((f) => f.id)).toContain('food-1');
+
+    await deleteCustomFood('u1', 'food-1');
+
+    expect((await recentFoods('u1')).map((f) => f.id)).not.toContain('food-1');
   });
 });

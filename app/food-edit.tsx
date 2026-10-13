@@ -88,6 +88,8 @@ export default function FoodEditScreen() {
         setErrors({ [error.field]: text });
       } else if (error instanceof CustomFoodError && error.code === 'not_found') {
         setMessage(t('food.custom.notFound'));
+      } else if (error instanceof CustomFoodError && error.code === 'in_use') {
+        setMessage(t('food.custom.inUseEdit'));
       } else {
         setMessage(t('errors.generic'));
       }

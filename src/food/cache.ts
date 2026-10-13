@@ -10,6 +10,14 @@ export async function recentFoods(userId: string): Promise<Food[]> {
   return Array.isArray(stored) ? stored : [];
 }
 
+// Drops one food from the recent list (for example after the user deletes their own food).
+export async function forgetFood(userId: string, foodId: string): Promise<void> {
+  const current = await recentFoods(userId);
+  if (current.some((food) => food.id === foodId)) {
+    await writeCache(userId, 'recentFoods', current.filter((food) => food.id !== foodId));
+  }
+}
+
 export async function rememberFoods(userId: string, foods: Food[]): Promise<void> {
   const current = await recentFoods(userId);
   const ids = new Set(foods.map((food) => food.id));

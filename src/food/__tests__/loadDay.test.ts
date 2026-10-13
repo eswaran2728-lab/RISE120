@@ -1,5 +1,5 @@
 import { mockStore } from '../../sync/testing/storageMock';
-import { enqueue } from '../../sync/queue';
+import { enqueue, removeIfUnchanged } from '../../sync/queue';
 import { supabase } from '../../lib/supabase';
 import { rememberFoods } from '../cache';
 import { loadFoodDay } from '../loadDay';
@@ -134,5 +134,33 @@ describe('loadFoodDay', () => {
 
     expect((await loadFoodDay('u1', '2026-10-13')).entries.map((e) => e.id)).toEqual(['late']);
     expect((await loadFoodDay('u1', '2026-10-12')).entries.map((e) => e.id)).toContain('p-yesterday');
+  });
+});
+
+describe('loadFoodDay race with a background sync', () => {
+  beforeEach(() => {
+    mockStore.clear();
+    jest.clearAllMocks();
+  });
+
+  it('still shows a just-added meal when its sync completes while the server is being read', async () => {
+    const op = pendingOp('just-added');
+    await enqueue('u1', op);
+    // The server read started before the upsert committed (so it has no row), and the flush then
+    // finished and removed the pending op before the read returned.
+    order.mockImplementation(async () => {
+      await removeIfUnchanged('u1', op);
+      return { data: [], error: null };
+    });
+    const builder: Record<string, unknown> = {};
+    builder.eq = (column: string, value: unknown) => {
+      eqCalls.push([column, value]);
+      return eqCalls.length % 2 === 0 ? { order } : builder;
+    };
+    (supabase.from as jest.Mock).mockReturnValue({ select: () => builder });
+
+    const day = await loadFoodDay('u1', '2026-10-13');
+
+    expect(day.entries.map((e) => e.id)).toEqual(['just-added']);
   });
 });

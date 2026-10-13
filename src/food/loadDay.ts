@@ -26,6 +26,11 @@ function mapLogRow(row: Record<string, any>): SyncedLogEntry {
 // One local day of meals: the server's rows plus pending operations. If the server cannot be read,
 // the last synced rows for that same day stand in, so the day still shows and can be edited offline.
 export async function loadFoodDay(userId: string, date: LocalDate): Promise<FoodDay> {
+  // Read the pending operations first. If a background sync finishes while the server is being read,
+  // a meal can be missing from the server answer (read before the write) and already gone from the
+  // queue (removed after it); taking the queue first means such a meal is still shown, once.
+  const pending = (await listPending(userId)).flatMap((op) => (op.kind === 'food_log' ? [op] : []));
+
   let synced: SyncedLogEntry[];
   try {
     const { data, error } = await supabase
@@ -42,7 +47,6 @@ export async function loadFoodDay(userId: string, date: LocalDate): Promise<Food
     synced = cached && cached.date === date ? cached.entries : [];
   }
 
-  const pending = (await listPending(userId)).flatMap((op) => (op.kind === 'food_log' ? [op] : []));
   const knownFoods = [...(await recentFoods(userId)), ...synced.flatMap((row) => (row.food ? [row.food] : []))];
   return buildFoodDay({ date, synced, pending, knownFoods });
 }

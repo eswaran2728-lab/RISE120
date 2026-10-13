@@ -44,8 +44,6 @@ export default function FoodSearchScreen() {
   const userId = session?.user?.id;
   const params = useLocalSearchParams<{ meal?: string }>();
   const initialMeal: MealType = MEAL_TYPES.includes(params.meal as MealType) ? (params.meal as MealType) : defaultMealFor(new Date());
-  // The local date is fixed when the screen opens, so a meal is logged on the day it was started.
-  const [openedDate] = useState(() => localDateString());
 
   const [query, setQuery] = useState('');
   const debounced = useDebouncedValue(query.trim(), 300);
@@ -138,7 +136,9 @@ export default function FoodSearchScreen() {
     setBusy(true);
     setError(null);
     try {
-      await queueFoodLog(userId, openedDate, { id: selected.entryId, food: selected.food, quantity, mealType: meal });
+      // The meal goes on the day the user is actually logging it, even if this screen was left open
+      // overnight, so it appears on today's Food tab.
+      await queueFoodLog(userId, localDateString(), { id: selected.entryId, food: selected.food, quantity, mealType: meal });
       void flushPending(userId, supabaseTransport).catch(() => undefined);
       if (router.canGoBack()) router.back();
       else router.replace('/(tabs)/food' as Href);
@@ -168,11 +168,18 @@ export default function FoodSearchScreen() {
   const row = (food: Food) => {
     const label = foodSourceLabel(food);
     return (
-      <TouchableOpacity key={food.id} accessibilityRole="button" style={styles.row} onPress={() => setSelected({ food, entryId: newLogId() })}>
-        <Text style={styles.name}>{food.name}</Text>
-        <Text style={styles.meta}>{`${food.servingDesc}  ·  ${round1(food.calories)} ${t('today.kcal')}`}</Text>
-        <Text style={label.verified ? styles.verified : styles.meta}>{`${t(label.key)}${label.verified ? ` · ${t('food.verified')}` : ''}`}</Text>
-      </TouchableOpacity>
+      <View key={food.id} style={styles.rowWrap}>
+        <TouchableOpacity accessibilityRole="button" style={styles.rowMain} onPress={() => setSelected({ food, entryId: newLogId() })}>
+          <Text style={styles.name}>{food.name}</Text>
+          <Text style={styles.meta}>{`${food.servingDesc}  ·  ${round1(food.calories)} ${t('today.kcal')}`}</Text>
+          <Text style={label.verified ? styles.verified : styles.meta}>{`${t(label.key)}${label.verified ? ` · ${t('food.verified')}` : ''}`}</Text>
+        </TouchableOpacity>
+        {food.source === 'custom' && food.userId !== null ? (
+          <TouchableOpacity accessibilityRole="button" style={styles.editButton} onPress={() => router.push(`/food-edit?id=${food.id}` as Href)}>
+            <Text style={styles.linkText}>{t('food.custom.edit')}</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
     );
   };
 
@@ -248,6 +255,9 @@ const styles = StyleSheet.create({
   heading: { color: tokens.color.text, fontSize: 18, fontWeight: '600', marginTop: tokens.space[4], marginBottom: tokens.space[1] },
   section: { marginTop: tokens.space[3] },
   row: { minHeight: tokens.minTap, justifyContent: 'center', paddingVertical: tokens.space[2], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2D3748' },
+  rowWrap: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2D3748' },
+  rowMain: { flex: 1, minHeight: tokens.minTap, justifyContent: 'center', paddingVertical: tokens.space[2] },
+  editButton: { minHeight: tokens.minTap, minWidth: tokens.minTap, alignItems: 'center', justifyContent: 'center', paddingHorizontal: tokens.space[2] },
   name: { color: tokens.color.text, fontSize: 16 },
   meta: { color: MUTED, fontSize: 13, lineHeight: 18, marginTop: 2 },
   verified: { color: tokens.color.accent, fontSize: 13, marginTop: 2 },

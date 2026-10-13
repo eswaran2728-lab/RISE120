@@ -2,8 +2,10 @@ import { supabase } from '../../lib/supabase';
 import { supabaseTransport } from '../supabaseTransport';
 import { localPhotoExists, uploadCheckinPhoto } from '../../checkin/photos';
 import { clearPhotoUri } from '../queue';
+import { applyFoodLogToDayCache } from '../../food/dayCache';
 import type { CheckinOperation, FoodLogOperation, WorkoutSetOperation } from '../types';
 
+jest.mock('../../food/dayCache', () => ({ applyFoodLogToDayCache: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../queue', () => ({ clearPhotoUri: jest.fn().mockResolvedValue(undefined) }));
 jest.mock('../../checkin/photos', () => ({
   uploadCheckinPhoto: jest.fn(),
@@ -191,6 +193,40 @@ describe('supabaseTransport', () => {
       });
 
       await expect(supabaseTransport.deleteFoodLog('A', log)).rejects.toThrow('Network request failed');
+    });
+  });
+
+  describe('food log day cache', () => {
+    const log: FoodLogOperation = {
+      kind: 'food_log', id: 'log-1', date: '2026-10-13', foodId: 'food-1', quantity: 1, mealType: 'lunch', deleted: false, food: null, updatedAt: 1,
+    };
+    const deleteChain: { eq: jest.Mock } = { eq: jest.fn() };
+
+    beforeEach(() => {
+      deleteChain.eq.mockReset();
+      let calls = 0;
+      deleteChain.eq.mockImplementation(() => (++calls >= 2 ? Promise.resolve({ error: null }) : deleteChain));
+      (supabase.from as jest.Mock).mockReturnValue({ upsert, delete: () => deleteChain });
+    });
+
+    it('records a confirmed upsert in the offline day cache', async () => {
+      await supabaseTransport.upsertFoodLog('A', log);
+
+      expect(applyFoodLogToDayCache).toHaveBeenCalledWith('A', log);
+    });
+
+    it('records a confirmed delete in the offline day cache', async () => {
+      await supabaseTransport.deleteFoodLog('A', { ...log, deleted: true });
+
+      expect(applyFoodLogToDayCache).toHaveBeenCalledWith('A', expect.objectContaining({ deleted: true }));
+    });
+
+    it('does not touch the cache when the server write fails', async () => {
+      upsert.mockResolvedValue({ error: { message: 'Network request failed' } });
+
+      await expect(supabaseTransport.upsertFoodLog('A', log)).rejects.toThrow();
+
+      expect(applyFoodLogToDayCache).not.toHaveBeenCalled();
     });
   });
 });

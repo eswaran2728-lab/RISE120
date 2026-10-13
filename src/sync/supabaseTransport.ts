@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { localPhotoExists, removeLocalPhoto, uploadCheckinPhoto } from '../checkin/photos';
 import { clearPhotoUri } from './queue';
+import { applyFoodLogToDayCache } from '../food/dayCache';
 import type { CheckinOperation, FoodLogOperation, SyncTransport, WorkoutSetOperation } from './types';
 
 // Belt and braces: the queue is already per user, and row-level security rejects a foreign
@@ -42,6 +43,7 @@ export const supabaseTransport: SyncTransport = {
       { onConflict: 'id' }
     );
     if (error) throw new Error(error.message);
+    await applyFoodLogToDayCache(userId, op);
   },
 
   // Deleting a row that is already gone is not an error, so a replayed delete is safe.
@@ -49,6 +51,7 @@ export const supabaseTransport: SyncTransport = {
     await assertSignedInAs(userId);
     const { error } = await supabase.from('food_logs').delete().eq('id', op.id).eq('user_id', userId);
     if (error) throw new Error(error.message);
+    await applyFoodLogToDayCache(userId, op);
   },
 
   async upsertCheckin(userId: string, op: CheckinOperation): Promise<void> {

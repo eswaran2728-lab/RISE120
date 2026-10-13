@@ -1,5 +1,6 @@
 import { supabase } from '../lib/supabase';
-import { rememberFoods } from './cache';
+import { listPending } from '../sync/queue';
+import { forgetFood, rememberFoods } from './cache';
 import { FOOD_COLUMNS, mapFoodRow } from './map';
 import type { Food, FoodFields } from './types';
 import { FoodField, parseFoodInput } from './validation';
@@ -49,8 +50,20 @@ export async function createCustomFood(userId: string, input: FoodFields): Promi
   return food;
 }
 
+// Past and queued meals point at a food by id, so a food that any meal references is frozen: editing
+// it would rewrite earlier days' totals and deleting it would erase those meals or strand a queued
+// one. The user can add a new food instead.
+async function assertNotLogged(userId: string, foodId: string): Promise<void> {
+  const { count, error } = await supabase.from('food_logs').select('id', { count: 'exact', head: true }).eq('food_id', foodId);
+  if (error) throw new Error(error.message);
+  if ((count ?? 0) > 0) throw new CustomFoodError('in_use');
+  const queued = (await listPending(userId)).some((op) => op.kind === 'food_log' && op.foodId === foodId && !op.deleted);
+  if (queued) throw new CustomFoodError('in_use');
+}
+
 export async function updateCustomFood(userId: string, foodId: string, input: FoodFields): Promise<Food> {
   const value = parseOrThrow(input);
+  await assertNotLogged(userId, foodId);
   const { data, error } = await supabase
     .from('foods')
     .update({
@@ -74,15 +87,10 @@ export async function updateCustomFood(userId: string, foodId: string, input: Fo
   return food;
 }
 
-// A food that meal logs reference cannot be deleted: that would erase those meals from history.
-// The database enforces the same rule, so a log added meanwhile is also refused.
+// A food that meal logs reference cannot be deleted. The database enforces the same rule for synced
+// logs, so a log added meanwhile is also refused.
 export async function deleteCustomFood(userId: string, foodId: string): Promise<void> {
-  const { count, error: countError } = await supabase
-    .from('food_logs')
-    .select('id', { count: 'exact', head: true })
-    .eq('food_id', foodId);
-  if (countError) throw new Error(countError.message);
-  if ((count ?? 0) > 0) throw new CustomFoodError('in_use');
+  await assertNotLogged(userId, foodId);
 
   const { data, error } = await supabase
     .from('foods')
@@ -94,6 +102,8 @@ export async function deleteCustomFood(userId: string, foodId: string): Promise<
     .select('id');
   if (error) throw new Error(error.message);
   if (!data || data.length === 0) throw new CustomFoodError('in_use');
+  // It no longer exists, so offline search must stop offering it.
+  await forgetFood(userId, foodId);
 }
 
 export async function getOwnCustomFood(userId: string, foodId: string): Promise<Food | null> {

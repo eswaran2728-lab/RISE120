@@ -1,6 +1,6 @@
 import { mockStore } from '../../sync/testing/storageMock';
 import { clearUserCache } from '../../cache/userCache';
-import { recentFoods, rememberFoods } from '../cache';
+import { forgetFood, recentFoods, rememberFoods } from '../cache';
 import type { Food } from '../types';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
@@ -83,5 +83,23 @@ describe('recent foods cache', () => {
     mockStore.set('rise120.cache.u1.recentFoods', '{oops');
 
     expect(await recentFoods('u1')).toEqual([]);
+  });
+});
+
+describe('forgetFood', () => {
+  beforeEach(() => mockStore.clear());
+
+  it('removes one food from the account recent list and leaves the rest and other accounts alone', async () => {
+    await rememberFoods('u1', [food('a'), food('b')]);
+    await rememberFoods('u2', [food('a')]);
+
+    await forgetFood('u1', 'a');
+
+    expect((await recentFoods('u1')).map((f) => f.id)).toEqual(['b']);
+    expect((await recentFoods('u2')).map((f) => f.id)).toEqual(['a']);
+  });
+
+  it('does nothing for a food that is not cached', async () => {
+    await expect(forgetFood('u1', 'nope')).resolves.toBeUndefined();
   });
 });
