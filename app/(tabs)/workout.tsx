@@ -9,7 +9,7 @@ import { useLocalDate } from '../../src/lib/useLocalDate';
 import { loadUnits } from '../../src/profile/cache';
 import { lbFromKg } from '../../src/onboarding/units';
 import { loadPlanBundle, PlanBundle } from '../../src/plan/planData';
-import { getPlanDay } from '../../src/today/selectors';
+import { getPlanDay, planPhase } from '../../src/today/selectors';
 import { flushPending } from '../../src/sync/flush';
 import { supabaseTransport } from '../../src/sync/supabaseTransport';
 import { loadSessionSets } from '../../src/workout/session';
@@ -122,6 +122,15 @@ export default function WorkoutScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={tokens.color.accent} size="large" />
+      </View>
+    );
+  }
+
+  if (bundle && !day && planPhase(bundle.plan, today) === 'complete') {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.message}>{t('today.planComplete')}</Text>
+        <Text style={styles.meta}>{t('today.planCompleteBody')}</Text>
       </View>
     );
   }

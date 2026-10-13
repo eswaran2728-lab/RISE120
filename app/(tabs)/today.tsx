@@ -13,7 +13,7 @@ import { loadPlanBundle } from '../../src/plan/planData';
 import { hasSeenPreview } from '../../src/plan/previewSeen';
 import { loadCheckin } from '../../src/checkin/load';
 import { loadCheckinDates } from '../../src/today/load';
-import { checkinStreak, deriveToday, getPlanDay, PLAN_LENGTH, TodayState } from '../../src/today/selectors';
+import { checkinStreak, deriveToday, getPlanDay, PLAN_LENGTH, planPhase, TodayState } from '../../src/today/selectors';
 import { loadSessionSets } from '../../src/workout/session';
 
 type Status = 'loading' | 'creating' | 'error' | 'ready';
@@ -27,6 +27,7 @@ export default function TodayScreen() {
   const [today, setToday] = useState<TodayState | null>(null);
   const [streak, setStreak] = useState(0);
   const [workoutNames, setWorkoutNames] = useState<string[]>([]);
+  const [planComplete, setPlanComplete] = useState(false);
   const mounted = useRef(true);
   const date = useLocalDate(); // rolls over at midnight and on resume, then the screen reloads
 
@@ -48,6 +49,7 @@ export default function TodayScreen() {
         router.push('/plan-preview' as Href);
       }
 
+      setPlanComplete(planPhase(bundle.plan, date) === 'complete');
       const day = getPlanDay(bundle.plan, bundle.days, date);
       const sessionSets = await loadSessionSets(userId, date);
       const checkin = await loadCheckin(userId, date);
@@ -103,6 +105,16 @@ export default function TodayScreen() {
         <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => void load()}>
           <Text style={styles.buttonText}>{t('errors.retry')}</Text>
         </TouchableOpacity>
+        {settingsLink}
+      </View>
+    );
+  }
+
+  if (planComplete) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.completeTitle}>{t('today.planComplete')}</Text>
+        <Text style={styles.message}>{t('today.planCompleteBody')}</Text>
         {settingsLink}
       </View>
     );
@@ -174,6 +186,7 @@ const styles = StyleSheet.create({
   content: { padding: tokens.space[5], paddingTop: tokens.space[7] + tokens.minTap },
   center: { flex: 1, backgroundColor: tokens.color.bg, alignItems: 'center', justifyContent: 'center', padding: tokens.space[5], gap: tokens.space[3] },
   message: { color: tokens.color.text, fontSize: 18, textAlign: 'center' },
+  completeTitle: { color: tokens.color.accent, fontSize: 26, fontWeight: '700', textAlign: 'center' },
   settingsLink: { position: 'absolute', top: tokens.space[7], right: tokens.space[5], minHeight: tokens.minTap, justifyContent: 'center', zIndex: 1 },
   settingsText: { color: tokens.color.accent, fontSize: 16 },
   title: { color: tokens.color.text, fontSize: 28, fontWeight: '700', marginBottom: tokens.space[4] },

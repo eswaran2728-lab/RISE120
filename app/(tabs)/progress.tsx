@@ -11,6 +11,7 @@ import { lbFromKg } from '../../src/onboarding/units';
 import { getPhotoUrl } from '../../src/checkin/photos';
 import { loadProgress } from '../../src/progress/load';
 import { deriveProgress, ProgressState } from '../../src/progress/selectors';
+import { planPhase } from '../../src/today/selectors';
 import { WeightChart } from '../../src/ui/WeightChart';
 
 const COLUMNS = 10;
@@ -24,6 +25,7 @@ export default function ProgressScreen() {
   const today = useLocalDate();
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<ProgressState | null>(null);
+  const [planComplete, setPlanComplete] = useState(false);
   const [units, setUnits] = useState<'metric' | 'imperial'>('metric');
   const [urls, setUrls] = useState<Record<string, string | null>>({});
 
@@ -38,6 +40,7 @@ export default function ProgressScreen() {
           if (!alive) return;
           setUnits(knownUnits);
           setProgress(input ? deriveProgress(input) : null);
+          setPlanComplete(input ? planPhase(input.plan, today) === 'complete' : false);
         } catch {
           if (alive) setProgress(null);
         } finally {
@@ -87,6 +90,7 @@ export default function ProgressScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{t('progress.title')}</Text>
+      {planComplete ? <Text style={styles.completeBanner}>{t('today.planComplete')}</Text> : null}
 
       <Text style={styles.heading}>{t('progress.weight')}</Text>
       {progress.weightPoints.length === 0 ? (
@@ -164,6 +168,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: tokens.color.bg, alignItems: 'center', justifyContent: 'center', padding: tokens.space[5] },
   message: { color: tokens.color.text, fontSize: 18, textAlign: 'center' },
   title: { color: tokens.color.text, fontSize: 28, fontWeight: '700' },
+  completeBanner: { color: tokens.color.accent, fontSize: 16, fontWeight: '600', marginTop: tokens.space[2] },
   heading: { color: tokens.color.text, fontSize: 18, fontWeight: '600', marginTop: tokens.space[5], marginBottom: tokens.space[2] },
   meta: { color: MUTED, fontSize: 13, lineHeight: 18, marginTop: tokens.space[1] },
   listItem: { color: tokens.color.text, fontSize: 16 },

@@ -33,8 +33,9 @@ function calorieTarget(profile: PlanProfile, rules: NutritionRules): number | nu
   if (!activityLevel) return null;
   const resting = 10 * profile.weightKg + 6.25 * profile.heightCm - 5 * profile.age + rules.sexOffset[energySex];
   const target = resting * rules.activityMultiplier[activityLevel] + rules.goalAdjustmentKcal[profile.goal];
-  const rounded = roundTo(target, rules.calorieRounding);
-  return rounded < rules.minCalories ? null : rounded;
+  // The safety cutoff applies to the unrounded estimate: 1,482 kcal must not become a 1,500 target.
+  if (target < rules.minCalories) return null;
+  return roundTo(target, rules.calorieRounding);
 }
 
 function pickExercises(profile: PlanProfile, exercises: Exercise[]): Exercise[] {

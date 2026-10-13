@@ -33,6 +33,7 @@ describe('userCache', () => {
     await writeCache('u1', 'profile', 2);
     await writeCache('u1', 'sets', 3);
     await writeCache('u1', 'units', 'imperial');
+    await writeCache('u1', 'checkins', ['2026-10-12']);
     await writeCache('u2', 'plan', 4);
 
     await clearUserCache('u1');
@@ -41,6 +42,7 @@ describe('userCache', () => {
     expect(await readCache('u1', 'profile')).toBeNull();
     expect(await readCache('u1', 'sets')).toBeNull();
     expect(await readCache('u1', 'units')).toBeNull();
+    expect(await readCache('u1', 'checkins')).toBeNull();
     expect(await readCache('u2', 'plan')).toBe(4);
   });
 });

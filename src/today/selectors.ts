@@ -10,6 +10,15 @@ export function getPlanDay(plan: Plan, days: PlanDay[], localDate: LocalDate): P
   return days.find((day) => day.dayNumber === dayNumber) ?? null;
 }
 
+export type PlanPhase = 'not_started' | 'active' | 'complete';
+
+// Day 121 onward is a finished plan, not a missing one.
+export function planPhase(plan: Plan, localDate: LocalDate): PlanPhase {
+  const dayNumber = dayNumberFor(plan.startDate, localDate);
+  if (dayNumber < 1) return 'not_started';
+  return dayNumber > PLAN_LENGTH ? 'complete' : 'active';
+}
+
 export interface TodayState {
   dayNumber: number;
   kind: 'rest' | 'workout';

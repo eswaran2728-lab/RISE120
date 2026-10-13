@@ -141,3 +141,24 @@ describe('nutrition targets', () => {
     expect(new Set(days.map((d) => `${d.calorie_target}/${d.protein_target_g}`)).size).toBe(1);
   });
 });
+
+describe('1,500 kcal cutoff uses the unrounded estimate', () => {
+  const calories = (overrides: Partial<PlanProfile>) => build(overrides)[0].calorie_target;
+  const small = { energySex: 'female' as const, activityLevel: 'sedentary' as const, age: 45, heightCm: 156, goal: 'recomp' as const };
+
+  it('gives no calorie target when the raw estimate is below 1,500 even if rounding would reach 1,500', () => {
+    // BMR = 470 + 975 - 225 - 161 = 1059; x1.4 = 1482.6 (rounds to 1,500, but is below the cutoff)
+    expect(calories({ ...small, weightKg: 47 })).toBeNull();
+  });
+
+  it('gives no calorie target just under the cutoff', () => {
+    // BMR = 487 + 975 - 225 - 161 = 1076 would be 1506; 48.5 kg: 485 + 589 = 1074 x1.4 = 1503.6 (not below)
+    // 48.2 kg: BMR 1070 x1.4 = 1498
+    expect(calories({ ...small, weightKg: 48.2 })).toBeNull();
+  });
+
+  it('still gives a target when the raw estimate is at or above 1,500', () => {
+    // 49 kg: BMR = 490 + 975 - 225 - 161 = 1079; x1.4 = 1510.6, rounds to 1,500
+    expect(calories({ ...small, weightKg: 49 })).toBe(1500);
+  });
+});
