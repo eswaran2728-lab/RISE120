@@ -104,4 +104,11 @@ describe('offline queue', () => {
 
     expect(await listPending('A')).toEqual([]);
   });
+
+  it('keeps a pending photo when the same check-in date is edited without a new photo', async () => {
+    await enqueue('A', checkin({ photoUri: 'file:///docs/photo.jpg', updatedAt: 1000 }));
+    await enqueue('A', checkin({ weightKg: 71, photoUri: null, updatedAt: 2000 }));
+
+    expect((await listPending('A'))[0]).toMatchObject({ weightKg: 71, photoUri: 'file:///docs/photo.jpg' });
+  });
 });

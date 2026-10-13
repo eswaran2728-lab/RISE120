@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { localPhotoExists, removeLocalPhoto, uploadCheckinPhoto } from '../checkin/photos';
 import type { CheckinOperation, SyncTransport, WorkoutSetOperation } from './types';
 
 // Belt and braces: the queue is already per user, and row-level security rejects a foreign
@@ -28,6 +29,10 @@ export const supabaseTransport: SyncTransport = {
 
   async upsertCheckin(userId: string, op: CheckinOperation): Promise<void> {
     await assertSignedInAs(userId);
+    // Upload first: if it fails the whole check-in stays queued with its local photo.
+    // If the local file is already gone, an earlier flush uploaded it (see below).
+    const hasLocalPhoto = !!op.photoUri && localPhotoExists(op.photoUri);
+    const photoPath = hasLocalPhoto ? await uploadCheckinPhoto(userId, op.date, op.photoUri as string) : undefined;
     const { error } = await supabase.from('checkins').upsert(
       {
         user_id: userId,
@@ -35,9 +40,18 @@ export const supabaseTransport: SyncTransport = {
         weight_kg: op.weightKg,
         mood: op.mood,
         sleep_hours: op.sleepHours,
+        // Left out when there is no new photo, so an existing photo_path is kept.
+        ...(photoPath ? { photo_path: photoPath } : {}),
       },
       { onConflict: 'user_id,checkin_date' }
     );
     if (error) throw new Error(error.message);
+    if (hasLocalPhoto) {
+      try {
+        removeLocalPhoto(op.photoUri as string);
+      } catch {
+        // Best effort: the photo is already safely uploaded.
+      }
+    }
   },
 };

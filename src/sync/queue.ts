@@ -37,7 +37,14 @@ export function enqueue(userId: string, op: PendingOperation): Promise<void> {
     const operations = await read(userId);
     const index = operations.findIndex((existing) => operationKey(existing) === operationKey(op));
     if (index === -1) operations.push(op);
-    else if (op.updatedAt >= operations[index].updatedAt) operations[index] = op;
+    else if (op.updatedAt >= operations[index].updatedAt) {
+      const existing = operations[index];
+      // An edit without a new photo must not drop a photo that is still waiting to upload.
+      operations[index] =
+        op.kind === 'checkin' && existing.kind === 'checkin' && op.photoUri === null
+          ? { ...op, photoUri: existing.photoUri }
+          : op;
+    }
     await write(userId, operations);
   });
 }

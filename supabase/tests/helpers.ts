@@ -34,6 +34,8 @@ export function nodeFetch(url: any, options: any = {}): Promise<any> {
       if (typeof options.headers.forEach === 'function') options.headers.forEach((v: any, k: string) => (headers[k] = v));
       else Object.assign(headers, options.headers);
     }
+    // Send an explicit Content-Length (chunked bodies on DELETE confuse a reused connection).
+    if (options.body) headers['content-length'] = Buffer.byteLength(options.body);
     const req = https.request(parsed, { method: options.method || 'GET', headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on('data', (chunk) => chunks.push(chunk));

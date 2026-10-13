@@ -2,6 +2,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { supabase } from '../lib/supabase';
 import { clearDraft } from '../onboarding/draft';
 import { clearPending } from '../sync/queue';
+import { removeLocalPhotos } from '../checkin/photos';
 
 const webClientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 if (webClientId) {
@@ -65,7 +66,10 @@ export async function deleteAccount(): Promise<void> {
   }
   await clearDraft();
   // Deleted account: drop its unsynced offline entries too.
-  if (userId) await clearPending(userId);
+  if (userId) {
+    await clearPending(userId);
+    removeLocalPhotos(userId);
+  }
   // The auth user is gone server-side, so only clear the local session.
   await supabase.auth.signOut({ scope: 'local' });
 }

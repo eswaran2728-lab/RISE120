@@ -3,6 +3,9 @@ import { supabase } from '../../lib/supabase';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { loadDraft, saveDraft } from '../../onboarding/draft';
 import { enqueue, listPending } from '../../sync/queue';
+import { removeLocalPhotos } from '../../checkin/photos';
+
+jest.mock('../../checkin/photos', () => ({ removeLocalPhotos: jest.fn() }));
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -219,6 +222,16 @@ describe('authService', () => {
 
       expect(await listPending('u1')).toEqual([]);
       expect(await listPending('u2')).toHaveLength(1);
+    });
+
+    it('removes the deleted account unsynced local photos', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({ data: { deleted: true }, error: null });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await deleteAccount();
+
+      expect(removeLocalPhotos).toHaveBeenCalledWith('u1');
     });
 
     it('keeps pending data on sign out so offline entries sync after the next sign-in', async () => {

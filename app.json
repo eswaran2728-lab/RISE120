@@ -36,7 +36,8 @@
         }
       ],
       "expo-localization",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      ["expo-image-picker", { "cameraPermission": false, "microphonePermission": false }]
     ],
     "experiments": {
       "typedRoutes": true
