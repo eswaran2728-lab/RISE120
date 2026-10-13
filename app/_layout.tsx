@@ -57,7 +57,9 @@ export default function RootLayout() {
   useEffect(() => {
     if (loading || effectiveProfileLoading || (session && profileError)) return;
 
-    const inAuthGroup = segments[0] === '(auth)';
+    // Typed routes only list existing screens; widen so we can compare against upcoming ones.
+    const topSegment: string | undefined = segments[0];
+    const inAuthGroup = topSegment === '(auth)';
 
     if (!session) {
       if (!inAuthGroup) {
@@ -65,11 +67,11 @@ export default function RootLayout() {
       }
     } else {
       if (effectiveOnboarded === false) {
-        if (segments[0] !== 'onboarding') {
+        if (topSegment !== 'onboarding') {
           router.replace('/onboarding/1' as any);
         }
       } else if (effectiveOnboarded === true) {
-        if (inAuthGroup || segments[0] !== '(tabs)') {
+        if (inAuthGroup || topSegment !== '(tabs)') {
           router.replace('/(tabs)/today' as any);
         }
       }
