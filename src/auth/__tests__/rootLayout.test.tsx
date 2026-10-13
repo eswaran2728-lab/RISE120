@@ -2,6 +2,7 @@ import React from 'react';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import RootLayout from '../../../app/_layout';
 import { supabase } from '../../lib/supabase';
+import { notifyOnboardingComplete } from '../../onboarding/completion';
 
 const mockReplace = jest.fn();
 
@@ -63,5 +64,17 @@ describe('RootLayout profile lookup', () => {
     });
 
     expect(mockReplace).toHaveBeenCalledWith('/(tabs)/today');
+  });
+
+  it('routes to today when onboarding completes for a not-onboarded user', async () => {
+    mockProfileLookup({ data: { onboarded_at: null }, error: null });
+    await renderLayout();
+    expect(mockReplace).toHaveBeenLastCalledWith('/onboarding/1');
+
+    await act(async () => {
+      notifyOnboardingComplete();
+    });
+
+    expect(mockReplace).toHaveBeenLastCalledWith('/(tabs)/today');
   });
 });

@@ -5,6 +5,7 @@ import { t } from '../src/i18n';
 import { tokens } from '../src/theme/tokens';
 import { useSession } from '../src/auth/useSession';
 import { supabase } from '../src/lib/supabase';
+import { onOnboardingComplete } from '../src/onboarding/completion';
 
 export default function RootLayout() {
   const { session, loading } = useSession();
@@ -50,6 +51,8 @@ export default function RootLayout() {
       isMounted = false;
     };
   }, [session?.user?.id, attempt]);
+
+  useEffect(() => onOnboardingComplete(() => setOnboarded(true)), []);
 
   const effectiveOnboarded = session ? onboarded : null;
   const effectiveProfileLoading = session ? profileLoading : false;
