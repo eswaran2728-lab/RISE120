@@ -132,8 +132,10 @@ describe('generate-plan edge function (live)', () => {
     const peekDays = await b.client.from('plan_days').select('id').eq('plan_id', planA);
     expect(peekDays.data ?? []).toEqual([]);
 
+    // A is a free user, so the Data API shows only the first free_plan_days (14) days. The full plan
+    // is stored (checked above through the service role); see check-limit.test.ts for the lock.
     const own = await a.client.from('plan_days').select('day_number').eq('plan_id', planA);
-    expect((own.data ?? []).length).toBe(120);
+    expect((own.data ?? []).length).toBe(14);
   });
 
   it('does not allow a client to call the atomic database function directly', async () => {

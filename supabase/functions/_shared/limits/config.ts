@@ -1,0 +1,33 @@
+// Reads the free-tier limits from the server's app_config rows. Nothing here has a default: a missing
+// or malformed value is reported so the caller can fail closed instead of guessing a limit.
+export interface LimitConfig {
+  freePlanDays: number;
+  freeFoodLogsPerDay: number;
+  freeAiMessagesPerDay: number;
+  adRewardsMaxPerDay: number;
+  adRewardFoodLogs: number;
+  adRewardAiMessages: number;
+}
+
+const KEYS: Record<keyof LimitConfig, string> = {
+  freePlanDays: 'free_plan_days',
+  freeFoodLogsPerDay: 'free_food_logs_per_day',
+  freeAiMessagesPerDay: 'free_ai_messages_per_day',
+  adRewardsMaxPerDay: 'ad_rewards_max_per_day',
+  adRewardFoodLogs: 'ad_reward_food_logs',
+  adRewardAiMessages: 'ad_reward_ai_messages',
+};
+
+const MAX_LIMIT = 100000;
+
+export type ConfigResult = { ok: true; config: LimitConfig } | { ok: false; key: string };
+
+export function parseLimitConfig(rows: { key: string; value: unknown }[]): ConfigResult {
+  const config: Partial<LimitConfig> = {};
+  for (const [field, key] of Object.entries(KEYS) as [keyof LimitConfig, string][]) {
+    const value = rows.find((row) => row.key === key)?.value;
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > MAX_LIMIT) return { ok: false, key };
+    config[field] = value;
+  }
+  return { ok: true, config: config as LimitConfig };
+}
