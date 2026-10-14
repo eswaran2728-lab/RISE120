@@ -24,19 +24,32 @@ interface Options {
   onChanged?: () => void;
 }
 
+// What an ad run has shown so far, tagged with the account that started it.
+interface Run {
+  userId: string;
+  busy: boolean;
+  messageKey: string | null;
+}
+
 // Runs the actions offered on a limit notice: Subscribe opens the paywall, Watch ad runs the rewarded-ad flow.
 export function useUnlock({ rewardType, onChanged }: Options) {
   const router = useRouter();
   const { session } = useSession();
   const userId = session?.user?.id;
-  const [busy, setBusy] = useState(false);
-  const [messageKey, setMessageKey] = useState<string | null>(null);
+  const [state, setState] = useState<Run | null>(null);
+  // Only the current account's run is ever shown, so another account's ad can neither keep these buttons busy
+  // nor leave its message behind.
+  const run_ = state && state.userId === userId ? state : null;
   const mounted = useRef(true);
+  const activeUser = useRef(userId);
   const changed = useRef(onChanged);
 
   useEffect(() => {
     changed.current = onChanged;
   }, [onChanged]);
+  useEffect(() => {
+    activeUser.current = userId;
+  }, [userId]);
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -50,21 +63,22 @@ export function useUnlock({ rewardType, onChanged }: Options) {
         router.push('/paywall' as Href);
         return;
       }
-      if (!userId || busy) return;
-      setBusy(true);
-      setMessageKey(null);
+      if (!userId || run_?.busy) return;
+      const forUser = userId;
+      const stillCurrent = () => mounted.current && activeUser.current === forUser;
+      setState({ userId: forUser, busy: true, messageKey: null });
       void getRewardedAdService()
-        .watch(userId, rewardType)
+        .watch(forUser, rewardType)
         .then((result) => {
-          if (!mounted.current) return;
-          setMessageKey(AD_MESSAGE_KEYS[result]);
+          if (!stillCurrent()) return;
+          setState({ userId: forUser, busy: true, messageKey: AD_MESSAGE_KEYS[result] });
           if (result === 'credited' || result === 'verifying') changed.current?.();
         })
-        .catch(() => mounted.current && setMessageKey('limits.adFailed'))
-        .finally(() => mounted.current && setBusy(false));
+        .catch(() => stillCurrent() && setState({ userId: forUser, busy: true, messageKey: 'limits.adFailed' }))
+        .finally(() => stillCurrent() && setState((prev) => (prev && prev.userId === forUser ? { ...prev, busy: false } : prev)));
     },
-    [router, userId, busy, rewardType]
+    [router, userId, run_?.busy, rewardType]
   );
 
-  return { run, busy, messageKey };
+  return { run, busy: run_?.busy ?? false, messageKey: run_?.messageKey ?? null };
 }
