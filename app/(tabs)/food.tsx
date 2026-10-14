@@ -17,6 +17,7 @@ import { foodDaySummary, foodSourceLabel, formatServing } from '../../src/food/s
 import { MEAL_TYPES, MealType, TargetsLike } from '../../src/food/types';
 import { FoodEntry } from '../../src/ui/FoodEntry';
 import { LimitNotice } from '../../src/ui/LimitNotice';
+import { useUnlock } from '../../src/monetization/useUnlock';
 import { formatReset, LimitSnapshot, loadLimitsOrCached, unlockActions } from '../../src/monetization/limits';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -101,6 +102,16 @@ export default function FoodScreen() {
       setBusy(false);
     }
   };
+
+  const unlock = useUnlock({
+    rewardType: 'food',
+    onChanged: () => {
+      // A reward arrived (or is on its way): reload, and let waiting logs retry now rather than at the next timer.
+      void load().catch(() => undefined);
+      syncThenReload();
+    },
+  });
+  const unlockMessage = unlock.messageKey ? t(unlock.messageKey) : null;
 
   if (loading || !day) {
     return (
@@ -192,7 +203,14 @@ export default function FoodScreen() {
       ) : null}
 
       {snapshot && snapshot.tier === 'free' && snapshot.food.remaining === 0 ? (
-        <LimitNotice body={t('limits.reached')} detail={resetDetail(snapshot.resetsAt)} actions={unlockActions(snapshot, 'food')} />
+        <LimitNotice
+          body={t('limits.reached')}
+          detail={resetDetail(snapshot.resetsAt)}
+          actions={unlockActions(snapshot, 'food')}
+          onAction={unlock.run}
+          busy={unlock.busy}
+          message={unlockMessage}
+        />
       ) : null}
 
       {blockedEntries.length > 0 ? (
@@ -200,7 +218,10 @@ export default function FoodScreen() {
           title={t('limits.pendingEntry')}
           body={t('limits.pendingBody')}
           detail={resetDetail(blockedEntries[0].blocked?.resetsAt ?? snapshot?.resetsAt)}
-          actions={[]}
+          actions={unlockActions(snapshot, 'food')}
+          onAction={unlock.run}
+          busy={unlock.busy}
+          message={unlockMessage}
         />
       ) : null}
 

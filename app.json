@@ -1,4 +1,7 @@
 {
+  "react-native-google-mobile-ads": {
+    "android_sdk": "classic"
+  },
   "expo": {
     "name": "Rise120",
     "slug": "eswar",

@@ -97,24 +97,18 @@ describe('verified ad reward ledger (live)', () => {
     expect((await credits(user, 'food'))[0].credits).toBe(5);
   });
 
-  it('flows into the food limit and the limit read model', async () => {
+  it('shows the verified credit in the limit read model', async () => {
     const user = await freshUser();
-    // The free limit is server config (other suites change it briefly), so measure it instead of assuming it.
-    const logUntilRefused = async () => {
-      let accepted = 0;
-      while (accepted < 20 && !(await logFood(user)).error) accepted += 1;
-      return accepted;
-    };
-    const base = await logUntilRefused();
-    expect(base).toBeLessThan(20);
-    expect((await logFood(user)).error?.message).toBe('FOOD_LIMIT_REACHED');
+    const before = (await callFunction('check-limit', user.jwt, {})).json;
 
     await grant((await issue(user, 'food')).token);
 
-    const snapshot = (await callFunction('check-limit', user.jwt, {})).json;
-    expect(snapshot.food.bonus).toBeGreaterThan(0);
-    expect(snapshot.adRewards).toMatchObject({ used: 1 });
-    expect(await logUntilRefused()).toBe(snapshot.food.bonus);
+    // Only relative checks: other suites briefly change the free limit while running in parallel, and the
+    // food gate's use of ad credits is covered by food-quota.test.ts.
+    const after = (await callFunction('check-limit', user.jwt, {})).json;
+    expect(after.food.bonus).toBe(before.food.bonus + 2);
+    expect(after.adRewards.used).toBe(before.adRewards.used + 1);
+    expect(after.adRewards.remaining).toBe(before.adRewards.remaining - 1);
   });
 
   it('grants nothing for an unknown token', async () => {

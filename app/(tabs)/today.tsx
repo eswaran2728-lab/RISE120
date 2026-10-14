@@ -16,6 +16,7 @@ import { loadCheckinDates } from '../../src/today/load';
 import { checkinStreak, deriveToday, getPlanDay, PLAN_LENGTH, planPhase, TodayState } from '../../src/today/selectors';
 import { loadSessionSets } from '../../src/workout/session';
 import { LimitNotice } from '../../src/ui/LimitNotice';
+import { useUnlock } from '../../src/monetization/useUnlock';
 import { LimitSnapshot, loadLimitsOrCached, lockedPlanDay, unlockActions } from '../../src/monetization/limits';
 
 type Status = 'loading' | 'creating' | 'error' | 'ready';
@@ -34,6 +35,7 @@ export default function TodayScreen() {
   const [locked, setLocked] = useState<{ dayNumber: number; snapshot: LimitSnapshot | null; checkinDone: boolean } | null>(null);
   const mounted = useRef(true);
   const date = useLocalDate(); // rolls over at midnight and on resume, then the screen reloads
+  const unlock = useUnlock({ rewardType: 'food' });
 
   const load = useCallback(async () => {
     if (!userId) return;
@@ -135,7 +137,7 @@ export default function TodayScreen() {
         {settingsLink}
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.title}>{`${t('today.day')} ${locked.dayNumber} / ${PLAN_LENGTH}`}</Text>
-          <LimitNotice title={t('limits.planLocked')} body={t('limits.planLockedBody')} actions={unlockActions(locked.snapshot, 'plan')} />
+          <LimitNotice title={t('limits.planLocked')} body={t('limits.planLockedBody')} actions={unlockActions(locked.snapshot, 'plan')} onAction={unlock.run} />
           <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => router.navigate('/(tabs)/food' as Href)}>
             <Text style={styles.linkText}>{t('today.logFood')}</Text>
           </TouchableOpacity>

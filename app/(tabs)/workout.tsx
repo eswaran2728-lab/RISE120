@@ -14,6 +14,7 @@ import { flushPending } from '../../src/sync/flush';
 import { supabaseTransport } from '../../src/sync/supabaseTransport';
 import { loadSessionSets } from '../../src/workout/session';
 import { LimitNotice } from '../../src/ui/LimitNotice';
+import { useUnlock } from '../../src/monetization/useUnlock';
 import { LimitSnapshot, loadLimitsOrCached, lockedPlanDay, unlockActions } from '../../src/monetization/limits';
 import {
   formatClock,
@@ -35,6 +36,7 @@ export default function WorkoutScreen() {
   const [loading, setLoading] = useState(true);
   const [bundle, setBundle] = useState<PlanBundle | null>(null);
   const [limits, setLimits] = useState<LimitSnapshot | null>(null);
+  const unlock = useUnlock({ rewardType: 'food' });
   const [units, setUnits] = useState<'metric' | 'imperial'>('metric');
   const [sets, setSets] = useState<SessionSet[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null); // `${date}:${exerciseId}`
@@ -147,7 +149,7 @@ export default function WorkoutScreen() {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <Text style={styles.title}>{t('workout.title')}</Text>
-        <LimitNotice title={t('limits.planLocked')} body={t('limits.planLockedBody')} actions={unlockActions(limits, 'plan')} />
+        <LimitNotice title={t('limits.planLocked')} body={t('limits.planLockedBody')} actions={unlockActions(limits, 'plan')} onAction={unlock.run} />
       </ScrollView>
     );
   }

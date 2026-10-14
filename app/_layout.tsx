@@ -4,6 +4,7 @@ import { DarkTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-ro
 import i18next, { t } from '../src/i18n';
 import { signOut } from '../src/auth/authService';
 import { useSync } from '../src/sync/useSync';
+import { getPurchaseService, setActiveUser } from '../src/monetization/services';
 import { tokens } from '../src/theme/tokens';
 import { useSession } from '../src/auth/useSession';
 import { supabase } from '../src/lib/supabase';
@@ -11,7 +12,7 @@ import { onOnboardingComplete, onPlanInputsSaved } from '../src/onboarding/compl
 import { cacheUnits, loadProfileCache, ProfileCache, saveProfileCache, updateProfileCache } from '../src/profile/cache';
 
 // Screens an onboarded user may be on; anywhere else (auth, onboarding) goes to Today.
-const SIGNED_IN_SEGMENTS = ['(tabs)', 'settings', 'plan-preview', 'checkin', 'food-edit', 'food-search', 'food-scan'];
+const SIGNED_IN_SEGMENTS = ['(tabs)', 'settings', 'plan-preview', 'checkin', 'food-edit', 'food-search', 'food-scan', 'paywall'];
 
 export default function RootLayout() {
   const { session, loading } = useSession();
@@ -75,6 +76,11 @@ export default function RootLayout() {
 
   const userId = session?.user?.id;
   useSync(userId);
+  // Keep the store customer and the ad flow on the signed-in account; sign-out and account switch follow.
+  useEffect(() => {
+    setActiveUser(userId ?? null);
+    void getPurchaseService().syncIdentity(userId ?? null);
+  }, [userId]);
   useEffect(
     () =>
       onOnboardingComplete(() => {
