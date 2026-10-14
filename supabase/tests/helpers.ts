@@ -87,13 +87,14 @@ export async function createTestUser(admin: SupabaseClient, label: string): Prom
   return { id: data.user.id, email, client, jwt: session.session.access_token };
 }
 
-export async function callFunction(name: string, jwt?: string, body?: object) {
+export async function callFunction(name: string, jwt?: string, body?: object, extraHeaders: Record<string, string> = {}) {
   const response = await nodeFetch(`${supabaseUrl}/functions/v1/${name}`, {
     method: 'POST',
     headers: {
       apikey: publishableKey,
       'Content-Type': 'application/json',
       ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}),
+      ...extraHeaders,
     },
     body: JSON.stringify(body ?? {}),
   });
