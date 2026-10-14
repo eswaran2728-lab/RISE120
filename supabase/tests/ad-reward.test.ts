@@ -253,6 +253,18 @@ describe('verified ad reward ledger (live)', () => {
     expect((await issue(user, 'food')).outcome).toBe('cap_reached');
   });
 
+  it('keeps only a few unused tokens per user, newest first, so requests cannot pile up', async () => {
+    const user = await freshUser();
+    const tokens: string[] = [];
+    for (let i = 0; i < 8; i++) tokens.push((await issue(user, 'food')).token);
+
+    const { data } = await admin.from('ad_reward_requests').select('token_hash').eq('user_id', user.id).is('consumed_at', null);
+
+    expect((data ?? []).length).toBeLessThanOrEqual(5);
+    expect(await grant(tokens[7])).toBe('granted'); // the newest token still works
+    expect(await grant(tokens[0])).toBe('unknown_token'); // the oldest was dropped
+  });
+
   it('keeps clients away from the request table, the ledger writes and both functions', async () => {
     const user = await freshUser();
     const { token } = await issue(user, 'food');
