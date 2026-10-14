@@ -46,14 +46,41 @@ const KIND_ORDER: PackageKind[] = ['monthly', 'yearly', 'lifetime'];
 const DEFAULT_POLL_DELAYS_MS = [1000, 2000, 3000, 5000, 8000];
 
 export function createPurchaseService({ sdk, loadLimits, pollDelaysMs = DEFAULT_POLL_DELAYS_MS, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) }: Options): PurchaseService {
-  // Who the store SDK is currently identified as. Every action is checked against it, so a purchase can
-  // never be attributed to (or read for) a different account than the one that started it.
-  let identity: string | null = null;
+  // Who the store customer should be (`desired`) and who the SDK has actually confirmed it is (`sdkUser`).
+  // Changes are applied one at a time by a single loop, so a slow login can never be overtaken by a later
+  // login or logout and leave the SDK on the wrong customer. An action is allowed only when the SDK is
+  // confirmed to be the account asking, which also holds purchases and restores back while a change is pending.
+  let desired: string | null = null;
+  let sdkUser: string | null = null;
+  let applying = false;
+  let current: Promise<void> = Promise.resolve();
+
+  const confirmed = (userId: string) => !applying && sdkUser === userId && desired === userId;
+
+  async function apply(): Promise<void> {
+    try {
+      while (sdkUser !== desired) {
+        const target = desired;
+        try {
+          if (target === null) await sdk.logOut();
+          else await sdk.logIn(target);
+          sdkUser = target;
+        } catch {
+          // The SDK refuses to log out an anonymous customer, which is already the goal. A failed login leaves
+          // the account unconfirmed, so purchases stay blocked until a later sync succeeds.
+          if (target !== null) return;
+          sdkUser = null;
+        }
+      }
+    } finally {
+      applying = false;
+    }
+  }
 
   async function waitForPremium(userId: string): Promise<'premium' | 'processing' | 'wrong_account'> {
     for (const delay of pollDelaysMs) {
       await sleep(delay);
-      if (identity !== userId) return 'wrong_account';
+      if (!confirmed(userId)) return 'wrong_account';
       try {
         if ((await loadLimits(userId)).tier === 'premium') return 'premium';
       } catch {
@@ -64,23 +91,14 @@ export function createPurchaseService({ sdk, loadLimits, pollDelaysMs = DEFAULT_
   }
 
   return {
-    async syncIdentity(userId) {
-      if (!sdk.isConfigured() || userId === identity) return;
-      if (userId === null) {
-        identity = null;
-        try {
-          await sdk.logOut();
-        } catch {
-          // The SDK refuses to log out an anonymous customer; nothing to undo.
-        }
-        return;
+    syncIdentity(userId) {
+      if (!sdk.isConfigured()) return Promise.resolve();
+      desired = userId;
+      if (!applying) {
+        applying = true;
+        current = apply();
       }
-      try {
-        await sdk.logIn(userId);
-        identity = userId;
-      } catch {
-        // Leave the identity as it was: purchases then refuse until a later sync succeeds.
-      }
+      return current;
     },
 
     async loadOffer() {
@@ -96,7 +114,7 @@ export function createPurchaseService({ sdk, loadLimits, pollDelaysMs = DEFAULT_
     },
 
     async purchase(userId, pkg) {
-      if (identity !== userId) return 'wrong_account';
+      if (!confirmed(userId)) return 'wrong_account';
       try {
         await sdk.purchase(pkg);
       } catch (error) {
@@ -106,7 +124,7 @@ export function createPurchaseService({ sdk, loadLimits, pollDelaysMs = DEFAULT_
     },
 
     async restore(userId) {
-      if (identity !== userId) return 'wrong_account';
+      if (!confirmed(userId)) return 'wrong_account';
       let hasActiveEntitlement: boolean;
       try {
         ({ hasActiveEntitlement } = await sdk.restore());

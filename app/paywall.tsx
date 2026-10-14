@@ -5,7 +5,7 @@ import { t } from '../src/i18n';
 import { useLanguage } from '../src/i18n/useLanguage';
 import { tokens } from '../src/theme/tokens';
 import { useSession } from '../src/auth/useSession';
-import { loadLimitsOrCached } from '../src/monetization/limits';
+import { accessStatus, AccessStatus, loadLimitsOrCached } from '../src/monetization/limits';
 import { OfferResult, PurchaseResult, RestoreResult, StorePackage } from '../src/monetization/purchases';
 import { getPurchaseService } from '../src/monetization/services';
 
@@ -31,7 +31,7 @@ export default function PaywallScreen() {
   const { session } = useSession();
   const userId = session?.user?.id;
   const [offer, setOffer] = useState<OfferResult | null>(null);
-  const [premium, setPremium] = useState(false);
+  const [access, setAccess] = useState<AccessStatus>('free');
   const [busy, setBusy] = useState(false);
   const [messageKey, setMessageKey] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -41,7 +41,7 @@ export default function PaywallScreen() {
     // Premium is whatever the server says; the store sheet below never decides it.
     const [result, limits] = await Promise.all([getPurchaseService().loadOffer(), loadLimitsOrCached(userId)]);
     if (!mounted.current) return;
-    setPremium(limits?.snapshot.tier === 'premium');
+    setAccess(accessStatus(limits));
     setOffer(result);
   }, [userId]);
 
@@ -56,7 +56,7 @@ export default function PaywallScreen() {
   const refreshPremium = async () => {
     if (!userId) return;
     const limits = await loadLimitsOrCached(userId);
-    if (mounted.current) setPremium(limits?.snapshot.tier === 'premium' && !limits.stale);
+    if (mounted.current) setAccess(accessStatus(limits));
   };
 
   const buy = async (pkg: StorePackage) => {
@@ -81,16 +81,30 @@ export default function PaywallScreen() {
     if (mounted.current) setBusy(false);
   };
 
+  // Nothing is offered unless access is known to be free: premium is shown only when confirmed, and when it
+  // cannot be verified a purchase could be a double charge, so the user is asked to retry instead.
+  const premium = access === 'premium';
+  const unverified = access === 'unverified';
+  const offering = access === 'free';
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{t('paywall.title')}</Text>
       <Text style={styles.body}>{t('paywall.body')}</Text>
 
       {premium ? <Text style={styles.success}>{t('paywall.premiumActive')}</Text> : null}
+      {unverified ? (
+        <>
+          <Text style={styles.message}>{t('paywall.cannotVerify')}</Text>
+          <TouchableOpacity accessibilityRole="button" style={styles.secondary} onPress={() => void load()}>
+            <Text style={styles.secondaryText}>{t('errors.retry')}</Text>
+          </TouchableOpacity>
+        </>
+      ) : null}
 
-      {!premium && offer === null ? <ActivityIndicator color={tokens.color.accent} style={styles.spinner} /> : null}
-      {!premium && offer?.status === 'not_configured' ? <Text style={styles.meta}>{t('paywall.notConfigured')}</Text> : null}
-      {!premium && offer?.status === 'unavailable' ? (
+      {offering && offer === null ? <ActivityIndicator color={tokens.color.accent} style={styles.spinner} /> : null}
+      {offering && offer?.status === 'not_configured' ? <Text style={styles.meta}>{t('paywall.notConfigured')}</Text> : null}
+      {offering && offer?.status === 'unavailable' ? (
         <>
           <Text style={styles.meta}>{t('paywall.unavailable')}</Text>
           <TouchableOpacity accessibilityRole="button" style={styles.secondary} onPress={() => {
@@ -102,7 +116,7 @@ export default function PaywallScreen() {
         </>
       ) : null}
 
-      {!premium && offer?.status === 'ready'
+      {offering && offer?.status === 'ready'
         ? offer.packages.map((pkg) => (
             <TouchableOpacity key={pkg.id} accessibilityRole="button" disabled={busy} style={[styles.package, busy && styles.dim]} onPress={() => void buy(pkg)}>
               <View>
@@ -118,7 +132,7 @@ export default function PaywallScreen() {
       {messageKey ? <Text style={styles.message}>{t(messageKey)}</Text> : null}
       {busy ? <ActivityIndicator color={tokens.color.accent} style={styles.spinner} /> : null}
 
-      {!premium && offer && offer.status !== 'not_configured' ? (
+      {offering && offer && offer.status !== 'not_configured' ? (
         <TouchableOpacity accessibilityRole="button" disabled={busy} style={styles.secondary} onPress={() => void restore()}>
           <Text style={styles.secondaryText}>{t('paywall.restore')}</Text>
         </TouchableOpacity>

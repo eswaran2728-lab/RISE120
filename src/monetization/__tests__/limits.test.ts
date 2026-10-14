@@ -1,6 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import { readCache, writeCache } from '../../cache/userCache';
-import { formatReset, loadLimits, loadLimitsOrCached, lockedPlanDay, parseLimitSnapshot, unlockActions, LimitSnapshot } from '../limits';
+import { accessStatus, formatReset, loadLimits, loadLimitsOrCached, lockedPlanDay, parseLimitSnapshot, unlockActions, LimitSnapshot } from '../limits';
 
 jest.mock('../../lib/supabase', () => ({ supabase: { functions: { invoke: jest.fn() } } }));
 jest.mock('../../cache/userCache', () => ({ readCache: jest.fn(), writeCache: jest.fn().mockResolvedValue(undefined) }));
@@ -125,5 +125,21 @@ describe('formatReset', () => {
   it('shows the server reset instant in local time and in UTC', () => {
     expect(formatReset('2026-10-15T00:00:00.000Z', { timeZone: 'Asia/Kuala_Lumpur', locale: 'en-GB' })).toEqual({ local: '08:00', utc: '00:00' });
     expect(formatReset('2026-10-15T00:00:00.000Z', { timeZone: 'America/New_York', locale: 'en-GB' })).toEqual({ local: '20:00', utc: '00:00' });
+  });
+});
+
+describe('accessStatus', () => {
+  it('confirms premium only from a fresh server answer', () => {
+    expect(accessStatus({ snapshot: snapshot({ tier: 'premium' }), stale: false })).toBe('premium');
+  });
+
+  it('does not confirm a remembered premium snapshot: it is unverified', () => {
+    expect(accessStatus({ snapshot: snapshot({ tier: 'premium' }), stale: true })).toBe('unverified');
+  });
+
+  it('treats free answers, fresh or remembered, and no answer as free', () => {
+    expect(accessStatus({ snapshot: snapshot(), stale: false })).toBe('free');
+    expect(accessStatus({ snapshot: snapshot(), stale: true })).toBe('free');
+    expect(accessStatus(null)).toBe('free');
   });
 });

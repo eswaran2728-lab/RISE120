@@ -207,3 +207,118 @@ describe('restore', () => {
     expect(await other.restore(A)).toBe('wrong_account');
   });
 });
+
+// An SDK whose logIn/logOut stay pending until the test releases them, tracking who the customer really is.
+function slowSdk() {
+  const state: { customer: string | null; releases: (() => void)[]; log: string[] } = { customer: null, releases: [], log: [] };
+  const pending = (action: () => void, label: string) =>
+    new Promise<void>((resolve) => {
+      state.log.push(label);
+      state.releases.push(() => {
+        action();
+        resolve();
+      });
+    });
+  const sdk = fakeSdk({
+    logIn: jest.fn((id: string) => pending(() => (state.customer = id), `logIn:${id}`)),
+    logOut: jest.fn(() => pending(() => (state.customer = null), 'logOut')),
+  });
+  // Lets the oldest pending call finish and gives the service a few ticks to start the next one.
+  const release = async () => {
+    state.releases.shift()?.();
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+  return { sdk, state, release };
+}
+
+describe('identity changes while a login is in flight', () => {
+  const pkgM = pkg('monthly', 'RM39.90');
+
+  it('ends with the SDK logged in as B after a rapid switch from A, one change at a time', async () => {
+    const { sdk, state, release } = slowSdk();
+    const purchases = service(sdk, async () => snapshot('premium'));
+
+    const first = purchases.syncIdentity(A);
+    const second = purchases.syncIdentity(B);
+    expect(state.log).toEqual([`logIn:${A}`]); // B waits for A to finish; the two never overlap
+    await release();
+    expect(state.log).toEqual([`logIn:${A}`, `logIn:${B}`]);
+    await release();
+    await Promise.all([first, second]);
+
+    expect(state.customer).toBe(B);
+  });
+
+  it('blocks purchases and restores until B is confirmed, and never for A', async () => {
+    const { sdk, state, release } = slowSdk();
+    const purchases = service(sdk, async () => snapshot('premium'));
+    const first = purchases.syncIdentity(A);
+    const second = purchases.syncIdentity(B);
+
+    expect(await purchases.purchase(B, pkgM)).toBe('wrong_account');
+    expect(await purchases.restore(B)).toBe('wrong_account');
+    await release(); // A is now logged in, B is not yet
+    expect(await purchases.purchase(A, pkgM)).toBe('wrong_account');
+    expect(await purchases.purchase(B, pkgM)).toBe('wrong_account');
+    expect(sdk.purchase).not.toHaveBeenCalled();
+
+    await release();
+    await Promise.all([first, second]);
+    expect(state.customer).toBe(B);
+    expect(await purchases.purchase(A, pkgM)).toBe('wrong_account');
+    expect(await purchases.purchase(B, pkgM)).toBe('premium');
+    expect(await purchases.restore(B)).toBe('premium');
+  });
+
+  it('finishes logged out when the user signs out during an in-flight login', async () => {
+    const { sdk, state, release } = slowSdk();
+    const purchases = service(sdk, async () => snapshot('premium'));
+
+    const login = purchases.syncIdentity(A);
+    const logout = purchases.syncIdentity(null);
+    await release(); // the login completes after the sign-out was requested
+    expect(state.log).toEqual([`logIn:${A}`, 'logOut']);
+    await release();
+    await Promise.all([login, logout]);
+
+    expect(state.customer).toBeNull();
+    expect(await purchases.purchase(A, pkgM)).toBe('wrong_account');
+  });
+
+  it('does not log in and out again when the user comes straight back to A', async () => {
+    const { sdk, state, release } = slowSdk();
+    const purchases = service(sdk, async () => snapshot('premium'));
+
+    const all = [purchases.syncIdentity(A), purchases.syncIdentity(B), purchases.syncIdentity(A)];
+    await release();
+    await Promise.all(all);
+
+    expect(state.log).toEqual([`logIn:${A}`]);
+    expect(state.customer).toBe(A);
+    expect(await purchases.purchase(A, pkgM)).toBe('premium');
+  });
+
+  it('keeps purchases blocked if the login for B fails, and recovers on the next sync', async () => {
+    const calls: string[] = [];
+    let failNext = true;
+    const sdk = fakeSdk({
+      logIn: jest.fn(async (id: string) => {
+        calls.push(id);
+        if (id === B && failNext) {
+          failNext = false;
+          throw new Error('offline');
+        }
+      }),
+    });
+    const purchases = service(sdk, async () => snapshot('premium'));
+    await purchases.syncIdentity(A);
+
+    await purchases.syncIdentity(B);
+    expect(await purchases.purchase(B, pkgM)).toBe('wrong_account');
+    expect(await purchases.purchase(A, pkgM)).toBe('wrong_account');
+
+    await purchases.syncIdentity(B);
+    expect(calls).toEqual([A, B, B]);
+    expect(await purchases.purchase(B, pkgM)).toBe('premium');
+  });
+});

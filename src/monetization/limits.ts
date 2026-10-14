@@ -58,6 +58,15 @@ export async function loadLimits(userId: string): Promise<LimitSnapshot> {
   return snapshot;
 }
 
+export type AccessStatus = 'premium' | 'unverified' | 'free';
+
+// Premium is confirmed only by a fresh server answer. A remembered "premium" (offline, or check-limit failing)
+// is "unverified": good enough to avoid pushing a purchase, never good enough to say access is confirmed.
+export function accessStatus(result: { snapshot: LimitSnapshot; stale: boolean } | null): AccessStatus {
+  if (result?.snapshot.tier !== 'premium') return 'free';
+  return result.stale ? 'unverified' : 'premium';
+}
+
 // With no signal the last answer for this account stands in, marked stale. It is only for display: the
 // server decides what is accepted, so a stale or missing snapshot never grants or blocks anything.
 export async function loadLimitsOrCached(userId: string): Promise<{ snapshot: LimitSnapshot; stale: boolean } | null> {
