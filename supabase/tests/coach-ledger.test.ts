@@ -322,6 +322,175 @@ describe('coach ledger and atomic AI allowance (live)', () => {
     });
   });
 
+  // A reservation holds its slot only for a lease. If the lease runs out and the slot is taken by another
+  // request, a late finish must not be charged on top of the allowance.
+  describe('finishing after the lease ran out', () => {
+    const expire = (user: TestUser, requestId: string) =>
+      admin.from('coach_requests').update({ lease_until: new Date(Date.now() - 1000).toISOString() }).eq('user_id', user.id).eq('request_id', requestId);
+    // The server-configured number of free messages (read, never rewritten: other suites depend on it).
+    const configuredAllowance = async () =>
+      (await admin.from('app_config').select('value').eq('key', 'free_ai_messages_per_day').single()).data!.value as number;
+    // Fills every free slot with completed replies, as other requests that took the freed slots.
+    const fillSlots = async (user: TestUser, n: number) => {
+      for (let i = 0; i < n; i++) expect((await finish(user, (await reserve(user)).requestId)).status).toBe('completed');
+    };
+
+    it('keeps only one reply and one charge when the slot was taken before the late finish', async () => {
+      const user = await freshUser();
+      const allowance = await configuredAllowance();
+      const a = await reserve(user);
+      expect(a.status).toBe('reserved');
+      await expire(user, a.requestId);
+      await fillSlots(user, allowance); // other requests take the freed slots
+
+      const late = await finish(user, a.requestId, { p_reply: 'A late reply', p_proposal: { day: 20 } });
+
+      expect(late.status).toBe('slot_taken');
+      expect(late.message_id).toBeUndefined();
+      expect(await aiUsed(user)).toBe(allowance);
+      expect(await count('coach_messages', user)).toBe(allowance);
+      expect(await count('coach_proposals', user)).toBe(0);
+      expect((await admin.from('coach_messages').select('reply').eq('user_id', user.id).eq('request_id', a.requestId)).data).toEqual([]);
+    });
+
+    it('succeeds when the late finish still has a free slot', async () => {
+      const user = await freshUser();
+      const a = await reserve(user);
+      await expire(user, a.requestId);
+
+      const late = await finish(user, a.requestId, { p_proposal: { day: 20 } });
+
+      expect(late.status).toBe('completed');
+      expect(late.message_id).toBeDefined();
+      expect(await aiUsed(user)).toBe(1);
+      expect(await count('coach_messages', user)).toBe(1);
+      expect(await count('coach_proposals', user)).toBe(1);
+    });
+
+    it('counts another live reservation as holding the slot', async () => {
+      const user = await freshUser();
+      const allowance = await configuredAllowance();
+      const a = await reserve(user);
+      await expire(user, a.requestId);
+      for (let i = 0; i < allowance; i++) expect((await reserve(user)).status).toBe('reserved'); // live, not finished
+
+      expect((await finish(user, a.requestId)).status).toBe('slot_taken');
+      expect(await aiUsed(user)).toBe(0);
+      expect(await count('coach_messages', user)).toBe(0);
+    });
+
+    it('succeeds when a verified AI credit made room for the late finish', async () => {
+      const user = await freshUser();
+      const allowance = await configuredAllowance();
+      const a = await reserve(user);
+      await expire(user, a.requestId);
+      await fillSlots(user, allowance);
+      await addAiCredit(user, 1);
+
+      expect((await finish(user, a.requestId)).status).toBe('completed');
+      expect(await aiUsed(user)).toBe(allowance + 1);
+    });
+
+    it('never blocks a premium user, and rechecks with the effective-premium rule', async () => {
+      const user = await freshUser();
+      const allowance = await configuredAllowance();
+      await admin.from('entitlements').update({ tier: 'premium' }).eq('user_id', user.id);
+      const a = await reserve(user);
+      await expire(user, a.requestId);
+      await fillSlots(user, allowance + 1);
+      expect((await finish(user, a.requestId)).status).toBe('completed');
+
+      // A lapsed subscription is not premium, even though the tier column still says so.
+      const lapsed = await freshUser();
+      await admin.from('entitlements').update({ tier: 'premium', source: 'revenuecat' }).eq('user_id', lapsed.id);
+      await admin.from('billing_state').upsert({ user_id: lapsed.id, last_event_ms: 1, premium_active: true, premium_until_ms: Date.now() + 86400000 });
+      const b = await reserve(lapsed);
+      await expire(lapsed, b.requestId);
+      await fillSlots(lapsed, allowance + 1); // still premium: all admitted
+      await admin.from('billing_state').update({ premium_until_ms: Date.now() - 60000 }).eq('user_id', lapsed.id);
+      expect((await finish(lapsed, b.requestId)).status).toBe('slot_taken');
+    });
+
+    it('does not recheck a reservation that is still live', async () => {
+      const user = await freshUser();
+      const a = await reserve(user);
+
+      expect((await finish(user, a.requestId)).status).toBe('completed');
+      expect(await aiUsed(user)).toBe(1);
+    });
+
+    it("uses the request's own quota day, not today", async () => {
+      const user = await freshUser();
+      const allowance = await configuredAllowance();
+      const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+      const a = await reserve(user);
+      await admin.from('coach_requests').update({ quota_day: yesterday, lease_until: new Date(Date.now() - 1000).toISOString() }).eq('user_id', user.id).eq('request_id', a.requestId);
+      await fillSlots(user, allowance); // today is full; yesterday is empty
+
+      expect((await finish(user, a.requestId)).status).toBe('completed');
+
+      const usage = (await admin.from('usage_daily').select('usage_date, ai_messages').eq('user_id', user.id)).data ?? [];
+      expect(usage.find((u) => u.usage_date === yesterday)?.ai_messages).toBe(1);
+      expect(usage.find((u) => u.usage_date === utcToday())?.ai_messages).toBe(allowance);
+    });
+
+    it('releases the lost request so it is not stuck, and a retry follows the normal rules', async () => {
+      const user = await freshUser();
+      const allowance = await configuredAllowance();
+      const a = await reserve(user);
+      await expire(user, a.requestId);
+      await fillSlots(user, allowance);
+      expect((await finish(user, a.requestId)).status).toBe('slot_taken');
+
+      expect((await finish(user, a.requestId)).status).toBe('not_reserved'); // no reply can be stored for it now
+      expect((await reserve(user, a.requestId)).status).toBe('limited'); // retrying is held to the allowance
+      expect(await aiUsed(user)).toBe(allowance);
+    });
+
+    it('lets the lost request be tried again once there is room, charging once', async () => {
+      const user = await freshUser();
+      const allowance = await configuredAllowance();
+      const a = await reserve(user);
+      await expire(user, a.requestId);
+      await fillSlots(user, allowance);
+      await finish(user, a.requestId); // slot_taken
+      await addAiCredit(user, 1);
+
+      expect((await reserve(user, a.requestId)).status).toBe('reserved');
+      expect((await finish(user, a.requestId)).status).toBe('completed');
+      expect(await aiUsed(user)).toBe(allowance + 1);
+    });
+
+    it('is not affected by another account taking its own slots', async () => {
+      const [a, b] = [await freshUser(), await freshUser()];
+      const allowance = await configuredAllowance();
+      const request = await reserve(a);
+      await expire(a, request.requestId);
+      await fillSlots(b, allowance);
+
+      expect((await finish(a, request.requestId)).status).toBe('completed');
+      expect(await aiUsed(a)).toBe(1);
+      expect(await aiUsed(b)).toBe(allowance);
+    });
+
+    it('lets exactly one of a lost slot and a racing new request win', async () => {
+      const user = await freshUser();
+      const allowance = await configuredAllowance();
+      const a = await reserve(user);
+      await expire(user, a.requestId);
+      await fillSlots(user, allowance - 1);
+
+      const [late, fresh] = await Promise.all([finish(user, a.requestId), reserve(user, uuid())]);
+
+      // Whichever runs first takes the last slot; the other is refused. Never both.
+      const lateWon = late.status === 'completed';
+      const freshWon = fresh.status === 'reserved';
+      expect(lateWon !== freshWon).toBe(true);
+      if (freshWon) expect(late.status).toBe('slot_taken');
+      else expect(fresh.status).toBe('limited');
+    });
+  });
+
   describe('isolation and server-only writes', () => {
     it('keeps requests, replies and proposals private to their account', async () => {
       const [a, b] = [await freshUser(), await freshUser()];
