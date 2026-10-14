@@ -8,6 +8,8 @@ Phase 2 (core loop) covers: a generated 120-day plan, Today, Workout (sets, rest
 
 Phase 3 (food) covers: a Food tab with four meals, consumed and remaining calories and protein, stored-food search with Malaysian foods ranked first once a reviewed seed exists, worldwide discovery through USDA FoodData Central, private custom foods, offline meal logging, and a read-only barcode lookup. **Phase 3 is not complete**: see "Phase 3 open gates" below.
 
+Phase 4 (monetisation) covers: free limits enforced by the database, a Google Play purchase flow through RevenueCat, rewarded ads verified by Google's server callback, and offline handling for food logs refused by the limit. **Phase 4 is code complete but not verified with real services**: see "Phase 4: monetisation" below.
+
 ## Setup
 
 1. Install dependencies: `npm install`
@@ -18,6 +20,8 @@ Phase 3 (food) covers: a Food tab with four meals, consumed and remaining calori
    | `EXPO_PUBLIC_SUPABASE_URL` | Supabase project URL |
    | `EXPO_PUBLIC_SUPABASE_KEY` | Supabase **publishable** key (never the service-role or secret key) |
    | `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` | Google OAuth **Web** client ID |
+
+   Optional public build settings for purchases and ads (`EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`, `EXPO_PUBLIC_ADMOB_REWARDED_ANDROID_UNIT_ID`, `ADMOB_ANDROID_APP_ID`) are described in `.env.example` and "Phase 4" below. Leave them unset to run without purchases and with Google test ads in development builds.
 
    `.env*` files are git-ignored (only `.env.example` is tracked). The app ships only the URL and publishable key; secrets stay in edge function secrets or local untracked files.
 3. For builds, set the same three variables in the EAS `development` environment: `npx eas-cli env:create --environment development --name <NAME> --visibility plaintext` (EAS does not upload git-ignored files).
@@ -73,20 +77,123 @@ Phase 3 cannot be called complete until all of these are closed. None is a code 
 4. **Open Food Facts contact.** `OFF_CONTACT` is not set, so live barcode lookup has not been exercised.
 5. **Phone checks.** Deferred to the final cross-phase device pass.
 
+## Phase 4: monetisation (code complete; real-service checks open)
+
+Free users get 14 plan days, 3 food logs per UTC day and (from Phase 5) 1 AI message per day; one verified rewarded ad adds 2 food logs or 1 AI message, up to 3 ads per UTC day; premium removes the limits. **Every number comes from the server `app_config` table; the app holds none.** The server decides everything: the app displays what `check-limit` returns and never grants access or credit itself.
+
+**Phase 4 is not verified end to end.** The code is finished, reviewed and tested against mocks and the development database, and a development build compiles. No real Google Play purchase, RevenueCat webhook delivery, AdMob ad or Google verification callback has ever run. See "Phase 4 verification levels" and "Phase 4 open gates" below.
+
+### How it works
+
+- **Food limit (database).** A trigger on `food_logs` admits an insert only if the user is premium or still has free capacity for the current UTC day (`app_config` base plus today's verified ad credits). It runs per user and day under an advisory lock, so two inserts for the last slot cannot both win, and re-sending a log with an existing id spends no slot. A refused insert raises `FOOD_LIMIT_REACHED` with the next 00:00 UTC as a hint. `usage_daily` mirrors the counts; clients cannot write it.
+- **Plan-day lock.** A row-level-security rule on `plan_days` shows a free user only the first `free_plan_days` days. The plan stays stored; all 120 days reappear when the user is premium.
+- **Premium and expiry.** `entitlements.tier` is changed only by the `revenuecat-webhook` function, from an authenticated RevenueCat event (header secret, constant-time compare). Each event id is recorded once (`revenuecat_events`), and the newest applied event time and expiry are kept per user (`billing_state`), so a late older event can never restore access after a newer expiration or refund. An expiration or refund that lists only another entitlement is ignored; a normal cancellation keeps access until expiry; unsupported, anonymous, sandbox (unless enabled) or malformed events never grant. **Every access gate uses one database-time rule** (`private.is_premium`: tier is premium and any stored expiry has not passed), so a lapsed subscription is free even if the webhook never delivered the expiration. Lifetime and manual grants stay premium.
+- **Rewarded ads.** `request-ad-reward` issues a short-lived (15 minute), one-use opaque token bound server-side to the user and reward type (only its hash is stored; at most 5 unused tokens per user). The app passes it to AdMob as SSV `custom_data`. `grant-ad-reward` verifies Google's ECDSA signature over the raw callback query with Google's published key (cached for an hour, refreshed on an unknown key id), checks the ad unit is ours (otherwise anyone could earn credits from their own AdMob account), consumes the token once, records each AdMob `transaction_id` once, and enforces the daily cap on database time. The local "reward earned" callback in the app is a UI event only: it grants nothing, and the app then re-reads `check-limit` to see the verified credit.
+- **Offline queue.** A food log the server refuses for the limit stays in that account's offline queue under its own id with a typed reason and the server's reset time. It survives restarts, never shows under another account, syncs once capacity returns (reset, verified ad, or premium), and does not block other queued operations.
+- **Screens.** Food shows the server allowance, the reset time (local and UTC) and the pending reason; Today and Workout show a Locked notice from day 15 while check-ins and food stay usable. `app/paywall.tsx` shows Monthly, Yearly and Lifetime with the **price string the store returns**, Restore, and a translated "cannot verify access" state with Retry whenever access is not confirmed by a fresh server answer (no products are offered then, to avoid double charges). Purchase and ad state is tied to the account that started it, and store identity changes are applied one at a time, so a late result for a previous account cannot affect the current one.
+- **Strings.** All new text is in English, Malay and Tamil through `t()`.
+
+### Phase 4 server pieces
+
+| Piece | Purpose |
+| --- | --- |
+| `check-limit` | Authenticated read model: tier, allowances, ad rewards, reset time, accessible plan days |
+| `revenuecat-webhook` | RevenueCat events to entitlement (header-authenticated, not a Supabase JWT) |
+| `request-ad-reward` | Issues the one-use ad token (authenticated) |
+| `grant-ad-reward` | Google SSV callback to credit ledger (Google signature, not a Supabase JWT) |
+
+Migrations added in Phase 4 (apply with `npx supabase db push`): `food_quota`, `plan_day_lock`, `revenuecat_events`, `premium_expiry_gates`, `ad_rewards`, `revoke_client_writes` (clients get no write privilege on `entitlements` or `app_config`), `ad_request_pruning`.
+
+Supabase function secrets (names only; set per project, never commit values):
+
+| Secret | Used by | Notes |
+| --- | --- | --- |
+| `REVENUECAT_WEBHOOK_AUTH` | `revenuecat-webhook` | exact Authorization header value RevenueCat sends; without it the function answers 503 |
+| `REVENUECAT_ENTITLEMENT_ID` | `revenuecat-webhook` | entitlement that means premium (`premium`) |
+| `REVENUECAT_ACCEPT_SANDBOX` | `revenuecat-webhook` | `true` on development only; leave unset in production |
+| `REVENUECAT_API_KEY` | `revenuecat-webhook` | optional RevenueCat **secret** key; only used to confirm entitlements after a TRANSFER (restore on a new account) |
+| `ADMOB_REWARDED_AD_UNIT_IDS` | `grant-ad-reward` | our rewarded ad unit ids; without it the function answers 503 |
+
+Public build settings live in the EAS `development` environment, not in Git: `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`, `EXPO_PUBLIC_ADMOB_REWARDED_ANDROID_UNIT_ID`, `ADMOB_ANDROID_APP_ID` (read by `app.config.js` at build time). Without them the app still builds: purchases show "not set up in this version" and development builds use Google's public test ads. A `production` build refuses to build without `ADMOB_ANDROID_APP_ID`. Step-by-step account setup is in `docs/monetization-setup.md`. `app.json` keeps a top-level `react-native-google-mobile-ads` key on purpose: the ads library's Android Gradle script fails without it.
+
+### Phase 4 verification levels
+
+These are four different things; only the first three have happened.
+
+1. **Mocked tests (Jest, no network).** Store and ad SDK adapters against mocked SDKs; purchase, restore, cancellation, webhook delay, unavailable offerings, account switch and sign-out; ad load failure and a local reward callback that grants nothing; the paywall screen and the ad hook rendered with mocks, including late results for a previous account; RevenueCat event mapping and ordering; AdMob signature verification against **signed fixtures from a throwaway key pair** (forged, changed, reordered and re-encoded queries, unknown key, malformed callbacks); key cache and rotation; offline queue persistence and per-account isolation.
+2. **Live Rise120 development-database tests (`supabase/tests/`, project `kozskxoiyrzrokjmcqeo`).** Food quota admission including concurrency, plan-day lock, `check-limit`, premium expiry on every gate (including expiry passing with no event), webhook through the deployed function (auth, idempotency, ordering, refund, cross-account), ad request and grant (unknown, expired, used and replayed tokens, concurrent callbacks, daily cap, correct bonus, wrong account), client write refusals, and the real `FOOD_LIMIT_REACHED` error shape. The webhook and SSV are driven with **simulated** events and signed fixtures, not by RevenueCat or Google.
+3. **Compiled development build.** An Android development build with the new native modules (`react-native-purchases`, `react-native-google-mobile-ads`) built successfully on EAS (build `622d2b05-85a6-41d8-b3c4-813ccf9bc708`, https://expo.dev/accounts/eswaran0321s-team/projects/eswar/builds/622d2b05-85a6-41d8-b3c4-813ccf9bc708). It proves the native code compiles. **It has not been installed or run on a phone.** Later changes were JavaScript only, so this build can load them; rebuild once the EAS variables below are set, because the AdMob App ID is baked in at build time.
+4. **Real purchases and ads: untested.** No Google Play product, store sheet, real price, purchase, restore, refund, RevenueCat webhook delivery, AdMob ad, or Google verification callback has run. Specifically unproven: that Supabase delivers the callback's raw query to `grant-ad-reward` byte for byte (the signature depends on it), that RevenueCat's real payloads match the documented fields, and that transfer/restore onto a new account works (needs `REVENUECAT_API_KEY`).
+
+Latest results (commit of this README): `npx jest` **78 suites, 1047 tests passed** (about 610 mocked unit tests in 57 suites under `src/`, the rest in `supabase/tests/`, which includes the live development-database tests), `npx tsc --noEmit` clean, `npm run lint` clean, `npx expo export --platform android` exports, and migration parity on development is 17 of 17 in sync. All eight edge functions are deployed and active on development.
+
+### Final review of Phase 4
+
+Reviewed: database grants and RLS (anonymous and signed-in clients probed against every server-only table and function), webhook and SSV trust boundaries, token lifetime and replay, expiry, queue persistence, account switching, translations, price display, refund and restore, build configuration, and a scan of tracked files for secrets (only Google's public sample ad ids appear). Findings fixed, each with a failing test first and its own commit:
+
+- `fix(monetization)`: a rewarded ad started by one account could keep another account's buttons busy and leave its message behind.
+- `fix(db)`: clients lacked only a policy, not a privilege, to write `entitlements` and `app_config`; the privilege is now revoked.
+- `fix(ads)`: one user could create unlimited unused ad tokens; now bounded.
+
+Earlier in Phase 4, review also fixed: expiry not enforced when no webhook event arrived; EXPIRATION/refund for another entitlement revoking premium; the paywall treating remembered access as confirmed; and account-switch races in store identity and in the paywall.
+
+### Phase 4 known limitations
+
+- `entitlements.tier` itself stays `premium` after a subscription lapses without a webhook event. Every access gate ignores the column alone (it also checks the stored expiry on database time), and the app reads limits only through `check-limit`, but anything else reading `tier` directly would be wrong. No scheduled sweep exists.
+- Restoring a purchase on a different account promotes it only if `REVENUECAT_API_KEY` is set; until then a transfer revokes the old account and does not promote the new one.
+- EU consent (Google UMP) for ads is not implemented. Fine for Malaysia-only testing; needed before an EU release.
+- The quota-day rollover at 00:00 UTC and prior-day slot release have no live clock tests (no clock seam); the fail-closed path for a missing `app_config` value is only unit-tested.
+- Free-plan locked days: the Workout tab shows the lock because the server withholds that day's exercises; there is no separate free-form workout log.
+- The AI allowance and the AI ad reward exist in the server but have no screen until Phase 5.
+- Some live suites change shared `app_config` values briefly. They are written to tolerate this, but run the live tests against a development project only, and note that a full run creates many test users and can hit Supabase's sign-in rate limit if repeated within minutes.
+- Malay and Tamil strings were drafted by an AI agent and still need native review.
+- Prices are never stored in the app. Product ids, prices and offerings are configured in Google Play and RevenueCat (RM 39.90 monthly, RM 199 yearly, RM 399 lifetime are the intended values).
+
+### Phase 4 open gates (exact account setup remaining)
+
+Nothing here is a code task. Details: `docs/monetization-setup.md`.
+
+1. **Google Play:** app for `com.eswaran2728.rise120` on an internal testing track; products `monthly` (RM 39.90), `yearly` (RM 199), `lifetime` (RM 399); your account as a licence tester.
+2. **RevenueCat:** Android app connected to Google Play, entitlement `premium`, a **current** offering with Monthly, Annual and Lifetime packages, webhook URL `https://kozskxoiyrzrokjmcqeo.supabase.co/functions/v1/revenuecat-webhook` with its Authorization header equal to the Supabase secret `REVENUECAT_WEBHOOK_AUTH`; copy the public `goog_` key. Optional: set the Supabase secret `REVENUECAT_API_KEY` (a RevenueCat secret key) for restore on a new account.
+3. **AdMob:** app and a Rewarded ad unit with server-side verification and callback `https://kozskxoiyrzrokjmcqeo.supabase.co/functions/v1/grant-ad-reward`; set the Supabase secret `ADMOB_REWARDED_AD_UNIT_IDS` to the ad unit id (development currently holds Google's sample unit).
+4. **EAS `development` environment:** `EXPO_PUBLIC_REVENUECAT_ANDROID_KEY`, `EXPO_PUBLIC_ADMOB_REWARDED_ANDROID_UNIT_ID`, `ADMOB_ANDROID_APP_ID`; then a new development build.
+5. **Phase 3 gates still open** (see "Phase 3 open gates" above): the reviewed Malaysian food seed, the Open Food Facts reuse decision, `USDA_FDC_API_KEY`, `OFF_CONTACT`, and the Phase 3 phone checks. The only phase tag is `phase-1-foundation`; no tag exists for Phase 2, 3 or 4, and none should be created until the final cross-phase device pass and your approval.
+6. **Production only, later:** a separate Supabase project and Play/RevenueCat/AdMob configuration; leave `REVENUECAT_ACCEPT_SANDBOX` unset there.
+
+### Final Android checklist (deferred cross-phase device pass)
+
+Run after the gates above and a fresh development build. Tick each only when it is actually seen on a phone; none has been run yet.
+
+- Sign in (email and Google), finish onboarding, see the Today plan; switch the app language to Malay and Tamil.
+- Workout and check-in work in airplane mode and sync later without duplicates; check-in photo uploads; Progress shows the history.
+- Food: log meals, edit and delete, offline logging; search, USDA discovery (needs `USDA_FDC_API_KEY`) and barcode scan (needs `OFF_CONTACT`) only after those are set.
+- Free limit: log 3 meals; the 4th shows "Waiting for daily limit" with the reset time; close and reopen the app and it is still there; other workouts and check-ins still sync.
+- Watch ad: the Watch ad button loads an ad, finishing it shows "being verified" and then the bonus appears; the waiting meal syncs on its own. With ads watched up to the daily cap the button reports the cap. A premium account shows no ad choice.
+- Day-15 lock: move the dev plan's start date back 14 days (SQL on the development project) and check Today and Workout show Locked with Subscribe, while check-in and Food stay usable.
+- Paywall: prices shown are exactly Google Play's; cancel a purchase (no charge, clear message); buy with the licence-tester account and premium unlocks within a minute; Restore purchases; refund the test purchase in Play and see access return to free.
+- Offline paywall: open it in airplane mode and see "cannot verify access" with Retry, not "Premium active" and no products.
+- Account switch and sign-out: sign out and in as another account while the paywall or an ad is open; nothing from the first account appears for the second.
+- Delete account removes the user; a new sign-up starts on the free tier.
+
 ## Edge functions
 
-Both functions verify the caller's JWT inside the function (user id comes from the token only, never the body), so they are deployed with `--no-verify-jwt`:
+Functions called by the app verify the caller's JWT inside the function (user id comes from the token only, never the body), so all functions are deployed with `--no-verify-jwt`. `revenuecat-webhook` and `grant-ad-reward` are called by RevenueCat and Google, which cannot send a Supabase JWT; they trust only their header secret or Google's signature:
 
 - `supabase/functions/delete-account` deletes the calling user and their stored photos.
 - `supabase/functions/generate-plan` creates the calling user's plan (see above).
 - `supabase/functions/search-foods` searches USDA FoodData Central with a server-side key (Phase 3).
 - `supabase/functions/lookup-barcode` is a read-only Open Food Facts barcode lookup (Phase 3).
+- `supabase/functions/check-limit`, `revenuecat-webhook`, `request-ad-reward` and `grant-ad-reward` are the Phase 4 limit, entitlement and ad-reward functions (see Phase 4).
 
 ```
 npx supabase functions deploy delete-account --project-ref <project-ref> --no-verify-jwt --use-api
 npx supabase functions deploy generate-plan --project-ref <project-ref> --no-verify-jwt --use-api
 npx supabase functions deploy search-foods --project-ref <project-ref> --no-verify-jwt --use-api
 npx supabase functions deploy lookup-barcode --project-ref <project-ref> --no-verify-jwt --use-api
+npx supabase functions deploy check-limit --project-ref <project-ref> --no-verify-jwt --use-api
+npx supabase functions deploy revenuecat-webhook --project-ref <project-ref> --no-verify-jwt --use-api
+npx supabase functions deploy request-ad-reward --project-ref <project-ref> --no-verify-jwt --use-api
+npx supabase functions deploy grant-ad-reward --project-ref <project-ref> --no-verify-jwt --use-api
 ```
 
 Deploy and run the database tests against a development project only.
@@ -94,14 +201,15 @@ Deploy and run the database tests against a development project only.
 ## Tests and checks
 
 - Unit tests: `npx jest`
-- Database and edge function tests (`supabase/tests/`) run against a real Supabase project and need an untracked `.env.test` with `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SERVICE_ROLE_KEY`. Use a development project, never production. They create and delete their own test users. Phase 2 adds live tests for plan generation, the exercise seed, profile inputs, and photo storage and deletion; Phase 3 adds live tests for the food model and row-level security, USDA discovery and barcode lookup (authentication and validation), and checks that candidate foods cannot become verified without review.
+- Database and edge function tests (`supabase/tests/`) run against a real Supabase project and need an untracked `.env.test` with `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SERVICE_ROLE_KEY`. Use a development project, never production. They create and delete their own test users. Phase 2 adds live tests for plan generation, the exercise seed, profile inputs, and photo storage and deletion; Phase 3 adds live tests for the food model and row-level security, USDA discovery and barcode lookup (authentication and validation), and checks that candidate foods cannot become verified without review. Phase 4 adds live tests for quota admission, the plan-day lock, `check-limit`, premium expiry, the RevenueCat webhook, the ad reward ledger, and client write refusals, plus pure-logic suites for webhook event mapping and AdMob signature verification (signed fixtures from a throwaway key, never a real key).
 - Android bundle check: `npx expo export --platform android`
+- Migration parity: `npx supabase migration list` (every local migration should also be applied remotely; run against the development project)
 - Types: `npx tsc --noEmit`
 - Lint: `npm run lint`
 
 ## Android development build
 
-Google sign-in, the Phase 2 photo and chart packages (`expo-image-picker`, `expo-image-manipulator`, `expo-file-system`, `react-native-svg`) and the Phase 3 barcode camera (`expo-camera`) use native code, so Expo Go does not work, and an older development build must be rebuilt after Phase 2 and again after Phase 3 for those packages to be present.
+Google sign-in, the Phase 2 photo and chart packages (`expo-image-picker`, `expo-image-manipulator`, `expo-file-system`, `react-native-svg`) the Phase 3 barcode camera (`expo-camera`) and the Phase 4 `react-native-purchases` and `react-native-google-mobile-ads` use native code, so Expo Go does not work, and an older development build must be rebuilt after Phase 2 after Phase 3, and again after Phase 4 for those packages to be present. The EAS `development` environment also needs the public purchase and ad settings listed in Phase 4.
 
 1. `npx eas-cli login`, then `npx eas-cli init` (once, links the Expo project).
 2. Create the Android signing keystore with `npx eas-cli credentials --platform android` and note its SHA-1.
