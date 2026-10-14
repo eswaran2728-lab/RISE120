@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import type { PendingLimit } from '../monetization/errors';
 import type { PendingOperation } from './types';
 
 const keyFor = (userId: string) => `rise120.sync.pending.${userId}`;
@@ -64,6 +65,22 @@ export function removeIfUnchanged(userId: string, op: PendingOperation): Promise
       (existing) => operationKey(existing) !== operationKey(op) || existing.updatedAt !== op.updatedAt
     );
     if (remaining.length !== operations.length) await write(userId, remaining);
+  });
+}
+
+// Records why a food log could not sync yet, unless the user edited the same row in the meantime.
+export function markBlocked(userId: string, op: PendingOperation, reason: PendingLimit): Promise<void> {
+  return withLock(userId, async () => {
+    if (op.kind !== 'food_log') return;
+    let changed = false;
+    const operations = (await read(userId)).map((existing) => {
+      if (existing.kind === 'food_log' && operationKey(existing) === operationKey(op) && existing.updatedAt === op.updatedAt) {
+        changed = true;
+        return { ...existing, blocked: reason };
+      }
+      return existing;
+    });
+    if (changed) await write(userId, operations);
   });
 }
 

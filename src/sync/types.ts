@@ -1,4 +1,5 @@
 import type { Food, MealType } from '../food/types';
+import type { PendingLimit } from '../monetization/errors';
 
 export type LocalDate = string; // YYYY-MM-DD in the device's local calendar
 
@@ -37,6 +38,9 @@ export interface FoodLogOperation extends OperationBase {
   mealType: MealType;
   deleted: boolean;
   food: Food | null;
+  // Set when the server refused this log for the daily limit. The log stays queued under the same id and
+  // is retried; the reason is only shown to the user and is dropped when the entry is edited or synced.
+  blocked?: PendingLimit | null;
 }
 
 export type PendingOperation = WorkoutSetOperation | CheckinOperation | FoodLogOperation;

@@ -1,3 +1,4 @@
+import type { PendingLimit } from '../monetization/errors';
 import type { FoodLogOperation, LocalDate } from '../sync/types';
 import { foodNutrition, sumNutrition } from './nutrition';
 import { Food, MEAL_TYPES, MealType, Nutrition } from './types';
@@ -21,6 +22,7 @@ export interface FoodDayEntry {
   food: Food | null; // null = the food could not be found; shown as unavailable, never as zero
   nutrition: Nutrition | null;
   pending: boolean;
+  blocked: PendingLimit | null; // pending because the server refused it for the daily limit
 }
 
 export interface MealGroup {
@@ -50,9 +52,9 @@ export function buildFoodDay(input: {
   const known = new Map(input.knownFoods.map((food) => [food.id, food]));
   const entries = new Map<string, FoodDayEntry>();
 
-  const toEntry = (base: Omit<FoodDayEntry, 'food' | 'nutrition' | 'pending'> & { food: Food | null }, pending: boolean): FoodDayEntry => {
+  const toEntry = (base: Omit<FoodDayEntry, 'food' | 'nutrition' | 'pending' | 'blocked'> & { food: Food | null }, pending: boolean, blocked: PendingLimit | null = null): FoodDayEntry => {
     const food = base.food ?? known.get(base.foodId) ?? null;
-    return { ...base, food, nutrition: food ? foodNutrition(food, base.quantity) : null, pending };
+    return { ...base, food, nutrition: food ? foodNutrition(food, base.quantity) : null, pending, blocked };
   };
 
   for (const row of input.synced) {
@@ -64,7 +66,7 @@ export function buildFoodDay(input: {
       entries.delete(op.id);
       continue;
     }
-    entries.set(op.id, toEntry(op, true));
+    entries.set(op.id, toEntry(op, true, op.blocked ?? null));
   }
 
   const ordered = [...entries.values()].sort((a, b) => (MEAL_ORDER.get(a.mealType) ?? 0) - (MEAL_ORDER.get(b.mealType) ?? 0));

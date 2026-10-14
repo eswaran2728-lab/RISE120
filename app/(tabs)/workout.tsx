@@ -13,6 +13,8 @@ import { getPlanDay, planPhase } from '../../src/today/selectors';
 import { flushPending } from '../../src/sync/flush';
 import { supabaseTransport } from '../../src/sync/supabaseTransport';
 import { loadSessionSets } from '../../src/workout/session';
+import { LimitNotice } from '../../src/ui/LimitNotice';
+import { LimitSnapshot, loadLimitsOrCached, lockedPlanDay, unlockActions } from '../../src/monetization/limits';
 import {
   formatClock,
   nextSetNumber,
@@ -32,6 +34,7 @@ export default function WorkoutScreen() {
   const userId = session?.user?.id;
   const [loading, setLoading] = useState(true);
   const [bundle, setBundle] = useState<PlanBundle | null>(null);
+  const [limits, setLimits] = useState<LimitSnapshot | null>(null);
   const [units, setUnits] = useState<'metric' | 'imperial'>('metric');
   const [sets, setSets] = useState<SessionSet[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null); // `${date}:${exerciseId}`
@@ -58,8 +61,13 @@ export default function WorkoutScreen() {
       let alive = true;
       (async () => {
         try {
-          const [planBundle, knownUnits] = await Promise.all([loadPlanBundle(userId).catch(() => null), loadUnits(userId)]);
+          const [planBundle, knownUnits, limitResult] = await Promise.all([
+            loadPlanBundle(userId).catch(() => null),
+            loadUnits(userId),
+            loadLimitsOrCached(userId),
+          ]);
           if (!alive) return;
+          setLimits(limitResult?.snapshot ?? null);
           // A failed refresh keeps the plan we already have instead of blanking the screen.
           if (planBundle) setBundle(planBundle);
           setUnits(knownUnits);
@@ -132,6 +140,15 @@ export default function WorkoutScreen() {
         <Text style={styles.message}>{t('today.planComplete')}</Text>
         <Text style={styles.meta}>{t('today.planCompleteBody')}</Text>
       </View>
+    );
+  }
+
+  if (bundle && !day && lockedPlanDay(bundle.plan, today, limits) !== null) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>{t('workout.title')}</Text>
+        <LimitNotice title={t('limits.planLocked')} body={t('limits.planLockedBody')} actions={unlockActions(limits, 'plan')} />
+      </ScrollView>
     );
   }
 

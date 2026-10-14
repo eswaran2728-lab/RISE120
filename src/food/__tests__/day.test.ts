@@ -124,3 +124,24 @@ describe('buildFoodDay', () => {
     expect(day.entries[0].food).toMatchObject({ source: 'curated', verified: true });
   });
 });
+
+describe('buildFoodDay blocked entries', () => {
+  const op = (id: string, extra: Partial<FoodLogOperation> = {}): FoodLogOperation => ({
+    kind: 'food_log', id, date: '2026-10-13', foodId: 'a', quantity: 1, mealType: 'lunch', deleted: false, food: null, updatedAt: 1, ...extra,
+  });
+
+  it('marks an entry that the server refused for the daily limit, keeping it visible and counted', () => {
+    const blocked = { kind: 'limit' as const, limit: 'food' as const, resetsAt: '2026-10-15T00:00:00.000Z' };
+
+    const day = buildFoodDay({ date: '2026-10-13', synced: [], pending: [op('p1', { blocked }), op('p2')], knownFoods: [food('a')] });
+
+    expect(day.entries.map((e) => [e.id, e.pending, e.blocked])).toEqual([['p1', true, blocked], ['p2', true, null]]);
+    expect(day.totals.calories).toBe(400);
+  });
+
+  it('has no blocked marker on synced entries', () => {
+    const day = buildFoodDay({ date: '2026-10-13', synced: [synced('s1')], pending: [], knownFoods: [] });
+
+    expect(day.entries[0].blocked).toBeNull();
+  });
+});

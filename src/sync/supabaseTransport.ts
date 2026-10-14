@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { quotaErrorFrom } from '../monetization/errors';
 import { localPhotoExists, removeLocalPhoto, uploadCheckinPhoto } from '../checkin/photos';
 import { clearPhotoUri } from './queue';
 import { applyFoodLogToDayCache } from '../food/dayCache';
@@ -42,7 +43,7 @@ export const supabaseTransport: SyncTransport = {
       },
       { onConflict: 'id' }
     );
-    if (error) throw new Error(error.message);
+    if (error) throw quotaErrorFrom(error) ?? new Error(error.message);
     await applyFoodLogToDayCache(userId, op);
   },
 

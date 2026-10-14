@@ -15,6 +15,8 @@ import { loadCheckin } from '../../src/checkin/load';
 import { loadCheckinDates } from '../../src/today/load';
 import { checkinStreak, deriveToday, getPlanDay, PLAN_LENGTH, planPhase, TodayState } from '../../src/today/selectors';
 import { loadSessionSets } from '../../src/workout/session';
+import { LimitNotice } from '../../src/ui/LimitNotice';
+import { LimitSnapshot, loadLimitsOrCached, lockedPlanDay, unlockActions } from '../../src/monetization/limits';
 
 type Status = 'loading' | 'creating' | 'error' | 'ready';
 
@@ -28,6 +30,8 @@ export default function TodayScreen() {
   const [streak, setStreak] = useState(0);
   const [workoutNames, setWorkoutNames] = useState<string[]>([]);
   const [planComplete, setPlanComplete] = useState(false);
+  // Set when today's plan day lies past what the server lets this account open (the free plan days).
+  const [locked, setLocked] = useState<{ dayNumber: number; snapshot: LimitSnapshot | null; checkinDone: boolean } | null>(null);
   const mounted = useRef(true);
   const date = useLocalDate(); // rolls over at midnight and on resume, then the screen reloads
 
@@ -57,6 +61,10 @@ export default function TodayScreen() {
       if (!alive()) return;
 
       setStreak(checkinStreak(dates, date));
+      const limitResult = day ? null : await loadLimitsOrCached(userId);
+      if (!alive()) return;
+      const lockedDay = day ? null : lockedPlanDay(bundle.plan, date, limitResult?.snapshot ?? null);
+      setLocked(lockedDay === null ? null : { dayNumber: lockedDay, snapshot: limitResult?.snapshot ?? null, checkinDone: checkin !== null });
       if (day) {
         setToday(deriveToday(day, sessionSets, checkin !== null));
         setWorkoutNames(
@@ -116,6 +124,25 @@ export default function TodayScreen() {
         <Text style={styles.completeTitle}>{t('today.planComplete')}</Text>
         <Text style={styles.message}>{t('today.planCompleteBody')}</Text>
         {settingsLink}
+      </View>
+    );
+  }
+
+  if (!today && locked) {
+    // Workouts, check-ins and food logging stay available; only the plan day itself is locked.
+    return (
+      <View style={styles.container}>
+        {settingsLink}
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={styles.title}>{`${t('today.day')} ${locked.dayNumber} / ${PLAN_LENGTH}`}</Text>
+          <LimitNotice title={t('limits.planLocked')} body={t('limits.planLockedBody')} actions={unlockActions(locked.snapshot, 'plan')} />
+          <TouchableOpacity accessibilityRole="button" style={styles.linkButton} onPress={() => router.navigate('/(tabs)/food' as Href)}>
+            <Text style={styles.linkText}>{t('today.logFood')}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity accessibilityRole="button" style={styles.button} onPress={() => router.push('/checkin' as Href)}>
+            <Text style={styles.buttonText}>{t(locked.checkinDone ? 'today.checkinDone' : 'today.checkin')}</Text>
+          </TouchableOpacity>
+        </ScrollView>
       </View>
     );
   }

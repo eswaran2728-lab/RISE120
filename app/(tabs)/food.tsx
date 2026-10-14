@@ -16,6 +16,8 @@ import { loadFoodDay } from '../../src/food/loadDay';
 import { foodDaySummary, foodSourceLabel, formatServing } from '../../src/food/summary';
 import { MEAL_TYPES, MealType, TargetsLike } from '../../src/food/types';
 import { FoodEntry } from '../../src/ui/FoodEntry';
+import { LimitNotice } from '../../src/ui/LimitNotice';
+import { formatReset, LimitSnapshot, loadLimitsOrCached, unlockActions } from '../../src/monetization/limits';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -32,11 +34,17 @@ export default function FoodScreen() {
   const [editing, setEditing] = useState<FoodDayEntry | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [limits, setLimits] = useState<{ snapshot: LimitSnapshot; stale: boolean } | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) return;
-    const [foodDay, bundle] = await Promise.all([loadFoodDay(userId, date), loadPlanBundle(userId).catch(() => null)]);
+    const [foodDay, bundle, limitResult] = await Promise.all([
+      loadFoodDay(userId, date),
+      loadPlanBundle(userId).catch(() => null),
+      loadLimitsOrCached(userId),
+    ]);
     if (!mounted.current) return;
+    setLimits(limitResult);
     const planDay = bundle ? getPlanDay(bundle.plan, bundle.days, date) : null;
     setTargets({ calories: planDay?.calorieTarget ?? null, proteinG: planDay?.proteinTargetG ?? null });
     setDay(foodDay);
@@ -134,6 +142,21 @@ export default function FoodScreen() {
     );
   }
 
+  // The server's reset time (00:00 UTC) shown in local time and in UTC.
+  const resetDetail = (resetsAt: string | null | undefined) => {
+    if (!resetsAt) return null;
+    const { local, utc } = formatReset(resetsAt);
+    return `${t('limits.resetsAt')} ${local} (${utc} UTC)`;
+  };
+  const snapshot = limits?.snapshot ?? null;
+  const blockedEntries = day.entries.filter((entry) => entry.blocked);
+  const allowance = snapshot?.food ?? null;
+  const allowanceText = !allowance
+    ? null
+    : allowance.base === null
+      ? `${t('limits.foodToday')}: ${t('limits.unlimited')}`
+      : `${t('limits.foodToday')}: ${allowance.used} / ${allowance.base + allowance.bonus}${allowance.bonus > 0 ? `  (+${allowance.bonus} ${t('limits.fromAds')})` : ''}`;
+
   const remainingText = (value: number | null, unit: string) =>
     value === null ? '—' : value < 0 ? `${round1(-value)} ${unit} ${t('food.over')}` : `${round1(value)} ${unit}`;
 
@@ -161,6 +184,26 @@ export default function FoodScreen() {
         {summary.incomplete ? <Text style={styles.warning}>{t('food.incomplete')}</Text> : null}
       </View>
 
+      {allowanceText ? (
+        <View style={styles.card}>
+          <Text style={styles.entryName}>{allowanceText}</Text>
+          {limits?.stale ? <Text style={styles.meta}>{t('limits.lastKnown')}</Text> : null}
+        </View>
+      ) : null}
+
+      {snapshot && snapshot.tier === 'free' && snapshot.food.remaining === 0 ? (
+        <LimitNotice body={t('limits.reached')} detail={resetDetail(snapshot.resetsAt)} actions={unlockActions(snapshot, 'food')} />
+      ) : null}
+
+      {blockedEntries.length > 0 ? (
+        <LimitNotice
+          title={t('limits.pendingEntry')}
+          body={t('limits.pendingBody')}
+          detail={resetDetail(blockedEntries[0].blocked?.resetsAt ?? snapshot?.resetsAt)}
+          actions={[]}
+        />
+      ) : null}
+
       {MEAL_TYPES.map((meal) => {
         const group = day.byMeal[meal];
         return (
@@ -180,7 +223,7 @@ export default function FoodScreen() {
                       entry.food ? formatServing(entry.quantity, entry.food.servingDesc) : null,
                       entry.nutrition ? `${round1(entry.nutrition.calories)} ${t('today.kcal')}` : null,
                       label ? `${t(label.key)}${label.verified ? ` · ${t('food.verified')}` : ''}` : null,
-                      entry.pending ? t('workout.pending') : null,
+                      entry.blocked ? t('limits.pendingEntry') : entry.pending ? t('workout.pending') : null,
                     ]
                       .filter(Boolean)
                       .join('  ·  ')}

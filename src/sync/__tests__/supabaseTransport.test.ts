@@ -3,6 +3,7 @@ import { supabaseTransport } from '../supabaseTransport';
 import { localPhotoExists, uploadCheckinPhoto } from '../../checkin/photos';
 import { clearPhotoUri } from '../queue';
 import { applyFoodLogToDayCache } from '../../food/dayCache';
+import { QuotaLimitError } from '../../monetization/errors';
 import type { CheckinOperation, FoodLogOperation, WorkoutSetOperation } from '../types';
 
 jest.mock('../../food/dayCache', () => ({ applyFoodLogToDayCache: jest.fn().mockResolvedValue(undefined) }));
@@ -227,6 +228,31 @@ describe('supabaseTransport', () => {
       await expect(supabaseTransport.upsertFoodLog('A', log)).rejects.toThrow();
 
       expect(applyFoodLogToDayCache).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('daily food limit', () => {
+    const food: FoodLogOperation = {
+      kind: 'food_log', id: 'log-1', date: '2026-10-13', foodId: 'food-1', quantity: 1, mealType: 'lunch', deleted: false, food: null, updatedAt: 1,
+    };
+
+    it('throws a typed limit error carrying the server reset time when the database refuses the log', async () => {
+      upsert.mockResolvedValue({ error: { message: 'FOOD_LIMIT_REACHED', code: 'P0001', hint: '2026-10-15T00:00:00Z' } });
+
+      const failure = await supabaseTransport.upsertFoodLog('A', food).catch((e) => e);
+
+      expect(failure).toBeInstanceOf(QuotaLimitError);
+      expect(failure.reason).toEqual({ kind: 'limit', limit: 'food', resetsAt: '2026-10-15T00:00:00.000Z' });
+      expect(applyFoodLogToDayCache).not.toHaveBeenCalled();
+    });
+
+    it('keeps other food errors as ordinary errors', async () => {
+      upsert.mockResolvedValue({ error: { message: 'Network request failed' } });
+
+      const failure = await supabaseTransport.upsertFoodLog('A', food).catch((e) => e);
+
+      expect(failure).not.toBeInstanceOf(QuotaLimitError);
+      expect(failure.message).toBe('Network request failed');
     });
   });
 });
