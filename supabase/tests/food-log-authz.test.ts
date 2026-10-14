@@ -17,6 +17,9 @@ describe('food log authorization (live)', () => {
   beforeAll(async () => {
     a = await createTestUser(admin, 'flog-a');
     b = await createTestUser(admin, 'flog-b');
+    // These tests log more than the free daily limit for A. Quota behaviour has its own suite
+    // (food-quota.test.ts), so A is premium here and only authorization is under test.
+    await admin.from('entitlements').update({ tier: 'premium' }).eq('user_id', a.id);
 
     const shared = await admin
       .from('foods')
