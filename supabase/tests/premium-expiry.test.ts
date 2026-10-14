@@ -59,11 +59,13 @@ describe('premium expiry is enforced by every access gate (live)', () => {
   describe('a subscription whose stored expiry is in the past', () => {
     it('is held to the free food limit even though the tier column still says premium', async () => {
       await subscribe(user, Date.now() - 60000);
-      for (let i = 0; i < 3; i++) expect((await logFood(user)).error).toBeNull();
 
-      const fourth = await logFood(user);
+      // The free limit is server config (another suite briefly changes it), so log until the server refuses:
+      // a lapsed subscription must hit the free cap, where a real premium user never would.
+      let refused: { message?: string } | null = null;
+      for (let i = 0; i < 20 && !refused; i++) refused = (await logFood(user)).error;
 
-      expect(fourth.error?.message).toBe('FOOD_LIMIT_REACHED');
+      expect(refused?.message).toBe('FOOD_LIMIT_REACHED');
       expect(await tierColumn(user)).toBe('premium');
     });
 
