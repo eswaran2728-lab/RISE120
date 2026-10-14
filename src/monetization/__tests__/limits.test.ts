@@ -137,9 +137,12 @@ describe('accessStatus', () => {
     expect(accessStatus({ snapshot: snapshot({ tier: 'premium' }), stale: true })).toBe('unverified');
   });
 
-  it('treats free answers, fresh or remembered, and no answer as free', () => {
+  it('confirms free only from a fresh server answer', () => {
     expect(accessStatus({ snapshot: snapshot(), stale: false })).toBe('free');
-    expect(accessStatus({ snapshot: snapshot(), stale: true })).toBe('free');
-    expect(accessStatus(null)).toBe('free');
+  });
+
+  it('cannot verify a remembered free snapshot or a missing answer', () => {
+    expect(accessStatus({ snapshot: snapshot(), stale: true })).toBe('unverified');
+    expect(accessStatus(null)).toBe('unverified');
   });
 });

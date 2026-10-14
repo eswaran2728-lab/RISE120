@@ -25,24 +25,42 @@ const RESTORE_MESSAGES: Record<RestoreResult, string> = {
 };
 const KIND_LABELS = { monthly: 'paywall.monthly', yearly: 'paywall.yearly', lifetime: 'paywall.lifetime' } as const;
 
+// Everything the screen knows belongs to one account. A result that arrives for an account that is no longer
+// the signed-in one is dropped, and a view for another account is never displayed.
+interface PaywallState {
+  userId: string;
+  access: AccessStatus;
+  offer: OfferResult | null;
+  busy: boolean;
+  messageKey: string | null;
+}
+
 export default function PaywallScreen() {
   useLanguage();
   const router = useRouter();
   const { session } = useSession();
   const userId = session?.user?.id;
-  const [offer, setOffer] = useState<OfferResult | null>(null);
-  const [access, setAccess] = useState<AccessStatus>('free');
-  const [busy, setBusy] = useState(false);
-  const [messageKey, setMessageKey] = useState<string | null>(null);
+  const [state, setState] = useState<PaywallState | null>(null);
+  const view = state && state.userId === userId ? state : null;
   const mounted = useRef(true);
+  const activeUser = useRef(userId);
+
+  useEffect(() => {
+    activeUser.current = userId;
+  }, [userId]);
+
+  // Applies a change only if that account is still the one on screen.
+  const patch = useCallback((forUser: string, change: Partial<PaywallState>) => {
+    if (!mounted.current || activeUser.current !== forUser) return;
+    setState((prev) => (prev && prev.userId === forUser ? { ...prev, ...change } : prev));
+  }, []);
 
   const load = useCallback(async () => {
     if (!userId) return;
     // Premium is whatever the server says; the store sheet below never decides it.
-    const [result, limits] = await Promise.all([getPurchaseService().loadOffer(), loadLimitsOrCached(userId)]);
-    if (!mounted.current) return;
-    setAccess(accessStatus(limits));
-    setOffer(result);
+    const [offer, limits] = await Promise.all([getPurchaseService().loadOffer(), loadLimitsOrCached(userId)]);
+    if (!mounted.current || activeUser.current !== userId) return;
+    setState({ userId, access: accessStatus(limits), offer, busy: false, messageKey: null });
   }, [userId]);
 
   useEffect(() => {
@@ -53,39 +71,47 @@ export default function PaywallScreen() {
     };
   }, [load]);
 
-  const refreshPremium = async () => {
-    if (!userId) return;
-    const limits = await loadLimitsOrCached(userId);
-    if (mounted.current) setAccess(accessStatus(limits));
+  const retry = () => {
+    setState(null);
+    void load();
+  };
+
+  // After a purchase or restore, ask the server again. This can only confirm premium, never take it away: the
+  // purchase service already saw a fresh server answer, and a failed read here proves nothing.
+  const confirmPremium = async (forUser: string) => {
+    const limits = await loadLimitsOrCached(forUser);
+    if (accessStatus(limits) === 'premium') patch(forUser, { access: 'premium' });
   };
 
   const buy = async (pkg: StorePackage) => {
-    if (!userId || busy) return;
-    setBusy(true);
-    setMessageKey(null);
-    const result = await getPurchaseService().purchase(userId, pkg).catch(() => 'failed' as const);
-    if (!mounted.current) return;
-    setMessageKey(PURCHASE_MESSAGES[result]);
-    if (result === 'premium') await refreshPremium();
-    if (mounted.current) setBusy(false);
+    if (!userId || !view || view.busy) return;
+    const forUser = userId;
+    patch(forUser, { busy: true, messageKey: null });
+    const result = await getPurchaseService().purchase(forUser, pkg).catch(() => 'failed' as const);
+    patch(forUser, { messageKey: PURCHASE_MESSAGES[result] });
+    if (result === 'premium') patch(forUser, { access: 'premium' });
+    else if (result === 'processing') await confirmPremium(forUser);
+    patch(forUser, { busy: false });
   };
 
   const restore = async () => {
-    if (!userId || busy) return;
-    setBusy(true);
-    setMessageKey(null);
-    const result = await getPurchaseService().restore(userId).catch(() => 'failed' as const);
-    if (!mounted.current) return;
-    setMessageKey(RESTORE_MESSAGES[result]);
-    if (result === 'premium') await refreshPremium();
-    if (mounted.current) setBusy(false);
+    if (!userId || !view || view.busy) return;
+    const forUser = userId;
+    patch(forUser, { busy: true, messageKey: null });
+    const result = await getPurchaseService().restore(forUser).catch(() => 'failed' as const);
+    patch(forUser, { messageKey: RESTORE_MESSAGES[result] });
+    if (result === 'premium') patch(forUser, { access: 'premium' });
+    else if (result === 'processing') await confirmPremium(forUser);
+    patch(forUser, { busy: false });
   };
 
-  // Nothing is offered unless access is known to be free: premium is shown only when confirmed, and when it
-  // cannot be verified a purchase could be a double charge, so the user is asked to retry instead.
-  const premium = access === 'premium';
-  const unverified = access === 'unverified';
-  const offering = access === 'free';
+  const premium = view?.access === 'premium';
+  const unverified = view?.access === 'unverified';
+  // Products are offered only after a fresh server answer confirmed free. Premium or unknown access gets none:
+  // a second purchase for someone who may already be premium could be a double charge.
+  const offering = view?.access === 'free';
+  const offer = view?.offer ?? null;
+  const busy = view?.busy ?? false;
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -96,21 +122,18 @@ export default function PaywallScreen() {
       {unverified ? (
         <>
           <Text style={styles.message}>{t('paywall.cannotVerify')}</Text>
-          <TouchableOpacity accessibilityRole="button" style={styles.secondary} onPress={() => void load()}>
+          <TouchableOpacity accessibilityRole="button" style={styles.secondary} onPress={retry}>
             <Text style={styles.secondaryText}>{t('errors.retry')}</Text>
           </TouchableOpacity>
         </>
       ) : null}
 
-      {offering && offer === null ? <ActivityIndicator color={tokens.color.accent} style={styles.spinner} /> : null}
+      {!view ? <ActivityIndicator color={tokens.color.accent} style={styles.spinner} /> : null}
       {offering && offer?.status === 'not_configured' ? <Text style={styles.meta}>{t('paywall.notConfigured')}</Text> : null}
       {offering && offer?.status === 'unavailable' ? (
         <>
           <Text style={styles.meta}>{t('paywall.unavailable')}</Text>
-          <TouchableOpacity accessibilityRole="button" style={styles.secondary} onPress={() => {
-              setOffer(null);
-              void load();
-            }}>
+          <TouchableOpacity accessibilityRole="button" style={styles.secondary} onPress={retry}>
             <Text style={styles.secondaryText}>{t('errors.retry')}</Text>
           </TouchableOpacity>
         </>
@@ -129,7 +152,7 @@ export default function PaywallScreen() {
           ))
         : null}
 
-      {messageKey ? <Text style={styles.message}>{t(messageKey)}</Text> : null}
+      {view?.messageKey ? <Text style={styles.message}>{t(view.messageKey)}</Text> : null}
       {busy ? <ActivityIndicator color={tokens.color.accent} style={styles.spinner} /> : null}
 
       {offering && offer && offer.status !== 'not_configured' ? (
