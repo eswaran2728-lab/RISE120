@@ -58,7 +58,15 @@ export function mapRevenueCatEvent(body: unknown, options: MapOptions): MapResul
   if (typeof appUserId !== 'string' || !UUID.test(appUserId)) return { status: 'ignored', reason: 'no_user' };
   const userId = appUserId.toLowerCase();
 
-  if (isRevoke) return { status: 'effects', ...base, effects: [{ userId, effect: 'revoke', untilMs: null }], reconcile: [] };
+  if (isRevoke) {
+    // An event that explicitly lists only other entitlements says nothing about ours. A missing or empty
+    // list still revokes: when unsure, access is withdrawn, never granted.
+    const ids = event.entitlement_ids;
+    if (options.entitlementId && Array.isArray(ids) && ids.length > 0 && !ids.includes(options.entitlementId)) {
+      return { status: 'ignored', reason: 'entitlement_mismatch' };
+    }
+    return { status: 'effects', ...base, effects: [{ userId, effect: 'revoke', untilMs: null }], reconcile: [] };
+  }
 
   if (options.entitlementId) {
     const ids = event.entitlement_ids;

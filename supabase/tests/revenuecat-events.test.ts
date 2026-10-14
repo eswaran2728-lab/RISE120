@@ -59,6 +59,29 @@ describe('mapRevenueCatEvent', () => {
     expect(result).toMatchObject({ status: 'effects', effects: [{ userId: USER_A, effect: 'revoke' }] });
   });
 
+  it('does not revoke on an expiration that lists only another entitlement', () => {
+    const result = mapRevenueCatEvent(event({ type: 'EXPIRATION', entitlement_ids: ['other'] }), OPTS);
+
+    expect(result).toMatchObject({ status: 'ignored', reason: 'entitlement_mismatch' });
+  });
+
+  it('does not revoke on a refund that lists only another entitlement', () => {
+    const result = mapRevenueCatEvent(event({ type: 'CANCELLATION', cancel_reason: 'CUSTOMER_SUPPORT', entitlement_ids: ['other'] }), OPTS);
+
+    expect(result).toMatchObject({ status: 'ignored', reason: 'entitlement_mismatch' });
+  });
+
+  it('revokes when the expiration lists Rise120 premium among several entitlements', () => {
+    const result = mapRevenueCatEvent(event({ type: 'EXPIRATION', entitlement_ids: ['other', 'premium'] }), OPTS);
+
+    expect(result).toMatchObject({ status: 'effects', effects: [{ userId: USER_A, effect: 'revoke' }] });
+  });
+
+  it('still revokes when an expiration lists no entitlements at all (fail toward no access)', () => {
+    expect(mapRevenueCatEvent(event({ type: 'EXPIRATION', entitlement_ids: [] }), OPTS)).toMatchObject({ status: 'effects' });
+    expect(mapRevenueCatEvent(event({ type: 'CANCELLATION', cancel_reason: 'CUSTOMER_SUPPORT', entitlement_ids: undefined }), OPTS)).toMatchObject({ status: 'effects' });
+  });
+
   it.each(['BILLING_ISSUE', 'SUBSCRIPTION_PAUSED', 'TEST', 'PRODUCT_CHANGE', 'TEMPORARY_ENTITLEMENT_GRANT', 'SUBSCRIBER_ALIAS', 'SOMETHING_NEW'])(
     'never changes access for %s',
     (type) => {

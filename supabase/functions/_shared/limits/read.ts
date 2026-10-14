@@ -76,14 +76,15 @@ export type LoadResult =
 export async function loadLimitSnapshot(db: Db, userId: string, now: Date = new Date()): Promise<LoadResult> {
   const day = quotaDayUtc(now);
 
-  const [configRows, entitlement, foodCount, usage, credits] = await Promise.all([
+  const [configRows, premium, foodCount, usage, credits] = await Promise.all([
     db.from('app_config').select('key, value'),
-    db.from('entitlements').select('tier').eq('user_id', userId).maybeSingle(),
+    // Database time decides: a lapsed subscription is free even if entitlements.tier is still 'premium'.
+    db.rpc('is_premium_now', { p_user_id: userId }),
     db.from('food_logs').select('id', { count: 'exact', head: true }).eq('user_id', userId).eq('accepted_utc_date', day),
     db.from('usage_daily').select('ai_messages').eq('user_id', userId).eq('usage_date', day).maybeSingle(),
     db.from('ad_credits').select('reward_type, credits').eq('user_id', userId).eq('quota_day', day),
   ]);
-  if (configRows.error || entitlement.error || foodCount.error || usage.error || credits.error) return { ok: false, reason: 'read' };
+  if (configRows.error || premium.error || foodCount.error || usage.error || credits.error) return { ok: false, reason: 'read' };
 
   const parsed = parseLimitConfig(configRows.data ?? []);
   if (!parsed.ok) return { ok: false, reason: 'config', key: parsed.key };
@@ -94,7 +95,7 @@ export async function loadLimitSnapshot(db: Db, userId: string, now: Date = new 
   return {
     ok: true,
     snapshot: buildLimitSnapshot({
-      tier: entitlement.data?.tier === 'premium' ? 'premium' : 'free',
+      tier: premium.data === true ? 'premium' : 'free',
       now,
       config: parsed.config,
       foodUsed: foodCount.count ?? 0,

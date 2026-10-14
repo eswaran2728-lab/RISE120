@@ -238,6 +238,18 @@ describe('RevenueCat entitlement sync (live)', () => {
       expect((await tierOf(a.id)).tier).toBe('free');
     });
 
+    it('keeps premium when an expiration or refund names only another entitlement', async () => {
+      const t = now();
+      await post(body(a.id, { event_timestamp_ms: t }), WEBHOOK_AUTH);
+
+      await post(body(a.id, { type: 'EXPIRATION', entitlement_ids: ['other'], event_timestamp_ms: t + 1000 }), WEBHOOK_AUTH);
+      await post(body(a.id, { type: 'CANCELLATION', cancel_reason: 'CUSTOMER_SUPPORT', entitlement_ids: ['other'], event_timestamp_ms: t + 2000 }), WEBHOOK_AUTH);
+      expect((await tierOf(a.id)).tier).toBe('premium');
+
+      await post(body(a.id, { type: 'EXPIRATION', entitlement_ids: ['premium'], event_timestamp_ms: t + 3000 }), WEBHOOK_AUTH);
+      expect((await tierOf(a.id)).tier).toBe('free');
+    });
+
     it('never grants for malformed, anonymous or unknown-user events', async () => {
       expect((await post({ nope: true }, WEBHOOK_AUTH)).status).toBe(400);
       expect((await post(body('$RCAnonymousID:abc'), WEBHOOK_AUTH)).status).toBe(200);
