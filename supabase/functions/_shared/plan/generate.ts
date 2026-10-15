@@ -27,12 +27,19 @@ function addDays(startDate: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function calorieTarget(profile: PlanProfile, rules: NutritionRules): number | null {
+// The unrounded estimate (Mifflin-St Jeor times activity, plus the goal adjustment), or null when the inputs are
+// missing. The 1,500 kcal safety cutoff is applied to this raw number, so it is exported for the coach validator.
+export function rawCalorieEstimate(profile: PlanProfile, rules: NutritionRules): number | null {
   const { energySex, activityLevel } = profile;
   if (energySex !== 'male' && energySex !== 'female') return null;
   if (!activityLevel) return null;
   const resting = 10 * profile.weightKg + 6.25 * profile.heightCm - 5 * profile.age + rules.sexOffset[energySex];
-  const target = resting * rules.activityMultiplier[activityLevel] + rules.goalAdjustmentKcal[profile.goal];
+  return resting * rules.activityMultiplier[activityLevel] + rules.goalAdjustmentKcal[profile.goal];
+}
+
+function calorieTarget(profile: PlanProfile, rules: NutritionRules): number | null {
+  const target = rawCalorieEstimate(profile, rules);
+  if (target === null) return null;
   // The safety cutoff applies to the unrounded estimate: 1,482 kcal must not become a 1,500 target.
   if (target < rules.minCalories) return null;
   return roundTo(target, rules.calorieRounding);
