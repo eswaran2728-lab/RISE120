@@ -24,6 +24,7 @@ describe('ai-coach function (live, no provider configured)', () => {
   const freshUser = async () => {
     if (!pool[taken]) pool[taken] = await createTestUser(admin, 'aicoach');
     const user = pool[taken++];
+    await admin.from('coach_attempts').delete().eq('user_id', user.id);
     await admin.from('coach_proposals').delete().eq('user_id', user.id);
     await admin.from('coach_messages').delete().eq('user_id', user.id);
     await admin.from('coach_requests').delete().eq('user_id', user.id);
@@ -204,6 +205,124 @@ describe('ai-coach function (live, no provider configured)', () => {
       expect(JSON.stringify(res.json)).not.toContain('private reply');
       expect(await aiUsed(a)).toBe(1);
       expect(await aiUsed(b)).toBe(0);
+    });
+  });
+
+  describe('rate limit on provider starts', () => {
+    const attemptsOf = async (user: TestUser) => (await admin.from('coach_attempts').select('*', { count: 'exact', head: true }).eq('user_id', user.id)).count ?? 0;
+    const limit = async () => (await admin.from('app_config').select('value').eq('key', 'coach_rate_limit_attempts').single()).data!.value as number;
+    const windowSeconds = async () => (await admin.from('app_config').select('value').eq('key', 'coach_rate_limit_window_seconds').single()).data!.value as number;
+    const makePremium = (user: TestUser) => admin.from('entitlements').update({ tier: 'premium' }).eq('user_id', user.id);
+    // Each call is admitted, finds no provider configured, and fails: a known failure that charges nothing.
+    const burn = async (user: TestUser, n: number, requestId?: () => string) => {
+      for (let i = 0; i < n; i++) expect((await ask(user, { requestId: requestId ? requestId() : uuid() })).status).toBe(503);
+    };
+
+    it('answers COACH_RATE_LIMITED with a server retry time after too many attempts, calling no provider and using no allowance', async () => {
+      const user = await freshUser();
+      const n = await limit();
+      await burn(user, n);
+
+      const res = await ask(user);
+
+      expect(res.status).toBe(429);
+      expect(Object.keys(res.json).sort()).toEqual(['error', 'retryAt']);
+      expect(res.json.error).toBe('COACH_RATE_LIMITED');
+      const wait = (Date.parse(res.json.retryAt) - Date.now()) / 1000;
+      expect(wait).toBeGreaterThan(0);
+      expect(wait).toBeLessThanOrEqual((await windowSeconds()) + 1);
+      expect(await attemptsOf(user)).toBe(n);
+      expect((await rows(user)).length).toBe(n); // no row for the blocked request
+      expect(await aiUsed(user)).toBe(0);
+    });
+
+    it('counts a failed request id that is retried again and again', async () => {
+      const user = await freshUser();
+      const n = await limit();
+      const requestId = uuid();
+      await burn(user, n, () => requestId);
+
+      const res = await ask(user, { requestId });
+
+      expect(res.json.error).toBe('COACH_RATE_LIMITED');
+      expect((await rows(user)).length).toBe(1);
+      expect(await attemptsOf(user)).toBe(n);
+    });
+
+    it('limits a premium member too', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const n = await limit();
+      await burn(user, n);
+
+      expect((await ask(user)).json.error).toBe('COACH_RATE_LIMITED');
+    });
+
+    it('still returns a completed answer while the account is rate limited', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const n = await limit();
+      const done = await complete(user, uuid(), null, 'Stored while rate limited.');
+      await burn(user, n - 1);
+      expect((await ask(user)).json.error).toBe('COACH_RATE_LIMITED');
+
+      const replay = await ask(user, { requestId: done.requestId });
+
+      expect(replay.status).toBe(200);
+      expect(replay.json.reply).toBe('Stored while rate limited.');
+    });
+
+    it('does not slow down another account', async () => {
+      const [a, b] = [await freshUser(), await freshUser()];
+      const n = await limit();
+      await burn(a, n);
+      expect((await ask(a)).json.error).toBe('COACH_RATE_LIMITED');
+
+      expect((await ask(b)).json.error).toBe('COACH_UNAVAILABLE');
+      expect(await attemptsOf(b)).toBe(1);
+    });
+
+    it('starts at most the allowed number of attempts across concurrent requests', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const n = await limit();
+
+      const results = await Promise.all(Array.from({ length: 10 }, () => ask(user)));
+
+      const admitted = results.filter((r) => r.status === 503).length;
+      const blocked = results.filter((r) => r.status === 429 && r.json.error === 'COACH_RATE_LIMITED').length;
+      expect(admitted + blocked).toBe(10);
+      expect(admitted).toBeGreaterThanOrEqual(1);
+      expect(admitted).toBeLessThanOrEqual(n);
+      expect(await attemptsOf(user)).toBe(admitted);
+    });
+
+    it('recovers once the attempts leave the rolling window', async () => {
+      const user = await freshUser();
+      const n = await limit();
+      await burn(user, n);
+      expect((await ask(user)).json.error).toBe('COACH_RATE_LIMITED');
+
+      await admin.from('coach_attempts').update({ started_at: new Date(Date.now() - ((await windowSeconds()) + 5) * 1000).toISOString() }).eq('user_id', user.id);
+
+      expect((await ask(user)).json.error).toBe('COACH_UNAVAILABLE');
+    });
+
+    it('sends a Retry-After header with the server retry time', async () => {
+      const user = await freshUser();
+      const n = await limit();
+      await burn(user, n);
+
+      const res = await nodeFetch(`${supabaseUrl}/functions/v1/ai-coach`, {
+        method: 'POST',
+        headers: { apikey: publishableKey, Authorization: `Bearer ${user.jwt}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requestId: uuid(), message: 'hello' }),
+      });
+
+      expect(res.status).toBe(429);
+      const seconds = Number(res.headers.get('retry-after'));
+      expect(seconds).toBeGreaterThan(0);
+      expect(seconds).toBeLessThanOrEqual((await windowSeconds()) + 1);
     });
   });
 });

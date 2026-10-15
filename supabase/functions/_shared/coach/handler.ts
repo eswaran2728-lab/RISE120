@@ -28,7 +28,10 @@ export interface Quota {
 }
 
 export interface LedgerPort {
-  reserve(userId: string, requestId: string): Promise<{ status: 'reserved' | 'completed' | 'in_progress' | 'limited'; resetsAt: string }>;
+  reserve(
+    userId: string,
+    requestId: string
+  ): Promise<{ status: 'reserved' | 'completed' | 'in_progress' | 'limited' | 'rate_limited'; resetsAt: string; retryAt?: string }>;
   finish(userId: string, requestId: string, input: FinishInput): Promise<{ status: 'completed' | 'slot_taken' | 'not_found' | 'not_reserved' }>;
   fail(userId: string, requestId: string): Promise<unknown>;
   loadStored(userId: string, requestId: string): Promise<StoredExchange | null>;
@@ -109,6 +112,8 @@ export async function handleCoachRequest(input: { userId: string; body: unknown 
   if (reservation.status === 'completed') return respondWithStored();
   if (reservation.status === 'in_progress') return { status: 409, body: { error: 'COACH_IN_PROGRESS' } };
   if (reservation.status === 'limited') return { status: 429, body: { error: 'AI_LIMIT_REACHED', resetsAt: reservation.resetsAt } };
+  // Too many provider starts (or one already running): nothing was reserved or charged and no provider is called.
+  if (reservation.status === 'rate_limited') return { status: 429, body: { error: 'COACH_RATE_LIMITED', retryAt: reservation.retryAt } };
 
   // Reserved: this call owns the request from here on.
   if (!deps.provider) {

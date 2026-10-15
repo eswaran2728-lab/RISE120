@@ -11,7 +11,7 @@ export function createLedger(db: Db): LedgerPort {
     async reserve(userId, requestId) {
       const { data, error } = await db.rpc('coach_reserve_request', { p_user_id: userId, p_request_id: requestId });
       if (error || !data) throw new Error('reserve_failed');
-      return { status: data.status, resetsAt: data.resets_at };
+      return { status: data.status, resetsAt: data.resets_at, ...(data.retry_at ? { retryAt: new Date(data.retry_at).toISOString() } : {}) };
     },
 
     async finish(userId, requestId, input: FinishInput) {

@@ -357,3 +357,42 @@ describe('privacy', () => {
     spies.forEach((s) => s.mockRestore());
   });
 });
+
+describe('rate limiting', () => {
+  const RETRY_AT = '2026-10-19T00:00:30.000Z';
+
+  it('answers COACH_RATE_LIMITED with the server retry time, calling nothing else', async () => {
+    const { deps, ledger, provider } = makeDeps();
+    ledger.reserve.mockResolvedValue({ status: 'rate_limited', resetsAt: RESETS, retryAt: RETRY_AT });
+
+    const res = await send(deps);
+
+    expect(res).toEqual({ status: 429, body: { error: 'COACH_RATE_LIMITED', retryAt: RETRY_AT } });
+    expect(provider.generate).not.toHaveBeenCalled();
+    expect(deps.loadContext).not.toHaveBeenCalled();
+    expect(ledger.finish).not.toHaveBeenCalled();
+    expect(ledger.fail).not.toHaveBeenCalled();
+    expect(deps.loadQuota).not.toHaveBeenCalled();
+  });
+
+  it('is told apart from running out of daily messages', async () => {
+    const { deps, ledger } = makeDeps();
+    ledger.reserve.mockResolvedValue({ status: 'rate_limited', resetsAt: RESETS, retryAt: RETRY_AT });
+    const rate = await send(deps);
+    ledger.reserve.mockResolvedValue({ status: 'limited', resetsAt: RESETS });
+    const daily = await send(deps);
+
+    expect((rate.body as { error: string }).error).toBe('COACH_RATE_LIMITED');
+    expect((daily.body as { error: string }).error).toBe('AI_LIMIT_REACHED');
+  });
+
+  it('does not rate limit the replay of a completed request', async () => {
+    const { deps, ledger, provider } = makeDeps();
+    ledger.reserve.mockResolvedValue({ status: 'completed', resetsAt: RESETS });
+
+    const res = await send(deps);
+
+    expect(res.status).toBe(200);
+    expect(provider.generate).not.toHaveBeenCalled();
+  });
+});

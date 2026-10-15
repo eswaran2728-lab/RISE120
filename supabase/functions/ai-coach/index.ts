@@ -53,5 +53,9 @@ Deno.serve(async (req) => {
       },
     }
   );
-  return json(result.body, result.status);
+  const response = json(result.body, result.status);
+  // Tell well-behaved clients when to come back, from the server's own clock.
+  const retryAt = typeof result.body.retryAt === 'string' ? Date.parse(result.body.retryAt) : NaN;
+  if (result.status === 429 && Number.isFinite(retryAt)) response.headers.set('Retry-After', String(Math.max(1, Math.ceil((retryAt - Date.now()) / 1000))));
+  return response;
 });

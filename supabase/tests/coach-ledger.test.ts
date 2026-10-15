@@ -6,7 +6,13 @@ const utcToday = () => new Date().toISOString().slice(0, 10);
 const nextMidnightUtc = () => new Date(`${utcToday()}T00:00:00.000Z`).getTime() + 86400000;
 const uuid = () => crypto.randomUUID();
 
-type Reservation = { status: 'reserved' | 'completed' | 'in_progress' | 'limited'; resets_at: string; message_id?: string };
+type Reservation = {
+  status: 'reserved' | 'completed' | 'in_progress' | 'limited' | 'rate_limited';
+  resets_at: string;
+  message_id?: string;
+  retry_at?: string;
+  reason?: 'rate' | 'active';
+};
 
 // The coach ledger: one row per request, one stored reply per completed request, and the AI allowance enforced
 // atomically in the database. The provider is never called here; these tests drive the same operations the
@@ -27,6 +33,7 @@ describe('coach ledger and atomic AI allowance (live)', () => {
   const freshUser = async () => {
     if (!pool[taken]) pool[taken] = await createTestUser(admin, 'coach');
     const user = pool[taken++];
+    await admin.from('coach_attempts').delete().eq('user_id', user.id);
     await admin.from('coach_proposals').delete().eq('user_id', user.id);
     await admin.from('coach_messages').delete().eq('user_id', user.id);
     await admin.from('coach_requests').delete().eq('user_id', user.id);
@@ -94,7 +101,7 @@ describe('coach ledger and atomic AI allowance (live)', () => {
       const user = await freshUser();
       await admin.from('ad_credits').insert({ user_id: user.id, reward_type: 'food', credits: 2, quota_day: utcToday(), transaction_id: `coach-${uuid()}` });
       await admin.from('ad_credits').insert({ user_id: user.id, reward_type: 'ai', credits: 1, quota_day: '2020-01-01', transaction_id: `coach-${uuid()}` });
-      await reserve(user);
+      await finish(user, (await reserve(user)).requestId);
       expect((await reserve(user)).status).toBe('limited');
 
       await addAiCredit(user, 1);
@@ -107,12 +114,20 @@ describe('coach ledger and atomic AI allowance (live)', () => {
       const user = await freshUser();
       await admin.from('entitlements').update({ tier: 'premium' }).eq('user_id', user.id);
 
-      const statuses = [(await reserve(user)).status, (await reserve(user)).status, (await reserve(user)).status];
+      // Past the free daily cap: each request finishes before the next starts (one runs at a time per account).
+      const statuses: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const r = await reserve(user);
+        statuses.push(r.status);
+        await finish(user, r.requestId);
+      }
       expect(statuses).toEqual(['reserved', 'reserved', 'reserved']);
 
       await admin.from('coach_requests').delete().eq('user_id', user.id);
       await admin.from('billing_state').upsert({ user_id: user.id, last_event_ms: 1, premium_active: true, premium_until_ms: Date.now() + 86400000 });
-      expect((await reserve(user)).status).toBe('reserved');
+      const unexpired = await reserve(user);
+      expect(unexpired.status).toBe('reserved');
+      await finish(user, unexpired.requestId);
       expect((await reserve(user)).status).toBe('reserved');
     });
 
@@ -488,6 +503,242 @@ describe('coach ledger and atomic AI allowance (live)', () => {
       expect(lateWon !== freshWon).toBe(true);
       if (freshWon) expect(late.status).toBe('slot_taken');
       else expect(fresh.status).toBe('limited');
+    });
+  });
+
+  // A guard on provider-start attempts, separate from the daily allowance: at most N attempts per rolling window and
+  // at most A active provider requests per account, for free and premium alike. Settings come from app_config.
+  describe('provider-start rate limit', () => {
+    const settings = async () => {
+      const rows = (await admin.from('app_config').select('key, value').in('key', ['coach_rate_limit_attempts', 'coach_rate_limit_window_seconds', 'coach_max_active_requests'])).data ?? [];
+      const get = (key: string) => rows.find((r) => r.key === key)?.value as number;
+      return { attempts: get('coach_rate_limit_attempts'), windowSeconds: get('coach_rate_limit_window_seconds'), active: get('coach_max_active_requests') };
+    };
+    const makePremium = (user: TestUser) => admin.from('entitlements').update({ tier: 'premium' }).eq('user_id', user.id);
+    const attempts = (user: TestUser) => count('coach_attempts', user);
+    const expire = (user: TestUser, requestId: string) =>
+      admin.from('coach_requests').update({ lease_until: new Date(Date.now() - 1000).toISOString() }).eq('user_id', user.id).eq('request_id', requestId);
+    const backdateAll = (user: TestUser, seconds: number) =>
+      admin.from('coach_attempts').update({ started_at: new Date(Date.now() - seconds * 1000).toISOString() }).eq('user_id', user.id);
+    // One complete attempt: admitted, then finished, so the active-request guard is not in the way.
+    const runOnce = async (user: TestUser) => {
+      const r = await reserve(user);
+      expect(r.status).toBe('reserved');
+      await finish(user, r.requestId);
+      return r;
+    };
+    const retryInSeconds = (r: { retry_at?: string }) => (Date.parse(r.retry_at!) - Date.now()) / 1000;
+
+    it('starts from the agreed settings: 5 attempts per rolling minute and 1 active request', async () => {
+      expect(await settings()).toEqual({ attempts: 5, windowSeconds: 60, active: 1 });
+    });
+
+    it('limits rapid requests for a premium member, with a server-generated retry time, and consumes no allowance', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const { attempts: n, windowSeconds } = await settings();
+      for (let i = 0; i < n; i++) await runOnce(user);
+
+      const blocked = await reserve(user);
+
+      expect(blocked.status).toBe('rate_limited');
+      expect(blocked.reason).toBe('rate');
+      expect(retryInSeconds(blocked)).toBeGreaterThan(0);
+      expect(retryInSeconds(blocked)).toBeLessThanOrEqual(windowSeconds + 1);
+      expect(await count('coach_requests', user)).toBe(n); // no request row for the blocked one
+      expect(await attempts(user)).toBe(n);
+      expect(await aiUsed(user)).toBe(n); // only the completed replies
+    });
+
+    it('reports the retry time as the moment the oldest attempt leaves the window', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const { attempts: n, windowSeconds } = await settings();
+      for (let i = 0; i < n; i++) await runOnce(user);
+      const oldest = (await admin.from('coach_attempts').select('started_at').eq('user_id', user.id).order('started_at').limit(1).single()).data!.started_at;
+
+      const blocked = await reserve(user);
+
+      expect(Math.abs(Date.parse(blocked.retry_at!) - (Date.parse(oldest) + windowSeconds * 1000))).toBeLessThan(1000);
+    });
+
+    it('counts a known failure that is retried with the same request id', async () => {
+      const user = await freshUser();
+      const { attempts: n } = await settings();
+      const requestId = uuid();
+      for (let i = 0; i < n; i++) {
+        expect((await reserve(user, requestId)).status).toBe('reserved');
+        await fail(user, requestId);
+      }
+
+      const blocked = await reserve(user, requestId);
+
+      expect(blocked.status).toBe('rate_limited');
+      expect(await count('coach_requests', user)).toBe(1); // one id, many attempts
+      expect(await attempts(user)).toBe(n);
+      expect(await aiUsed(user)).toBe(0); // failures and the blocked retry charged nothing
+    });
+
+    it('applies the same limit to a free member whose failures never used the daily allowance', async () => {
+      const user = await freshUser();
+      const { attempts: n } = await settings();
+      for (let i = 0; i < n; i++) {
+        const r = await reserve(user);
+        expect(r.status).toBe('reserved');
+        await fail(user, r.requestId);
+      }
+
+      expect((await reserve(user)).status).toBe('rate_limited');
+    });
+
+    it('lets the daily allowance answer first: an exhausted free member is "limited", not rate limited, and no attempt is logged', async () => {
+      const user = await freshUser();
+      await runOnce(user); // uses the single free message
+      const before = await attempts(user);
+
+      const next = await reserve(user);
+
+      expect(next.status).toBe('limited');
+      expect(await attempts(user)).toBe(before);
+    });
+
+    it('allows only one active provider request per account, for premium too', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const first = await reserve(user);
+
+      const second = await reserve(user);
+
+      expect(first.status).toBe('reserved');
+      expect(second.status).toBe('rate_limited');
+      expect(second.reason).toBe('active');
+      expect(retryInSeconds(second)).toBeGreaterThan(0);
+      expect(retryInSeconds(second)).toBeLessThanOrEqual(6);
+      expect(await attempts(user)).toBe(1); // the blocked one is not an attempt
+      expect(await count('coach_requests', user)).toBe(1);
+
+      await finish(user, first.requestId);
+      expect((await reserve(user)).status).toBe('reserved');
+    });
+
+    it('does not let an expired lease block the account (the lease-expiry behaviour is unchanged)', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const stuck = await reserve(user);
+      await expire(user, stuck.requestId);
+
+      const next = await reserve(user);
+
+      expect(next.status).toBe('reserved');
+      expect((await reserve(user, stuck.requestId)).status).toBe('in_progress'); // the unknown outcome is still never regenerated
+    });
+
+    it('admits exactly one of many concurrent requests for a premium member', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+
+      const results = await Promise.all(Array.from({ length: 8 }, () => reserve(user)));
+
+      expect(results.filter((r) => r.status === 'reserved')).toHaveLength(1);
+      expect(results.filter((r) => r.status === 'rate_limited')).toHaveLength(7);
+      expect(await attempts(user)).toBe(1);
+      expect(await count('coach_requests', user)).toBe(1);
+    });
+
+    it('admits none of a concurrent burst once the window is full', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const { attempts: n } = await settings();
+      for (let i = 0; i < n; i++) await runOnce(user);
+
+      const results = await Promise.all(Array.from({ length: 6 }, () => reserve(user)));
+
+      expect(results.every((r) => r.status === 'rate_limited')).toBe(true);
+      expect(await attempts(user)).toBe(n);
+    });
+
+    it('keeps one account\'s limit away from another account, and keeps attempts server-only', async () => {
+      const [a, b] = [await freshUser(), await freshUser()];
+      await makePremium(a);
+      await makePremium(b);
+      const { attempts: n } = await settings();
+      for (let i = 0; i < n; i++) await runOnce(a);
+      expect((await reserve(a)).status).toBe('rate_limited');
+
+      expect((await reserve(b)).status).toBe('reserved');
+      expect(await attempts(b)).toBe(1);
+      expect((await a.client.from('coach_attempts').select('*')).data ?? []).toEqual([]);
+      expect((await a.client.from('coach_attempts').insert({ user_id: a.id, request_id: uuid() })).error).not.toBeNull();
+      expect((await a.client.from('coach_attempts').delete().eq('user_id', a.id)).error).not.toBeNull();
+    });
+
+    it('works again once attempts leave the rolling window', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const { attempts: n, windowSeconds } = await settings();
+      for (let i = 0; i < n; i++) await runOnce(user);
+      expect((await reserve(user)).status).toBe('rate_limited');
+
+      await backdateAll(user, windowSeconds + 5);
+
+      expect((await reserve(user)).status).toBe('reserved');
+    });
+
+    it('frees exactly one slot when only the oldest attempt leaves the window', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const { attempts: n, windowSeconds } = await settings();
+      for (let i = 0; i < n; i++) await runOnce(user);
+      const oldest = (await admin.from('coach_attempts').select('id').eq('user_id', user.id).order('started_at').limit(1).single()).data!.id;
+      await admin.from('coach_attempts').update({ started_at: new Date(Date.now() - (windowSeconds + 2) * 1000).toISOString() }).eq('id', oldest);
+
+      const one = await reserve(user);
+      expect(one.status).toBe('reserved');
+      await finish(user, one.requestId);
+
+      expect((await reserve(user)).status).toBe('rate_limited');
+    });
+
+    it('still returns a completed answer and an in-progress answer while rate limited', async () => {
+      const user = await freshUser();
+      await makePremium(user);
+      const { attempts: n } = await settings();
+      const done = await runOnce(user);
+      for (let i = 0; i < n - 2; i++) await runOnce(user);
+      const live = await reserve(user); // the n-th attempt, still running
+      expect((await reserve(user)).status).toBe('rate_limited');
+
+      const replay = await reserve(user, done.requestId);
+      const waiting = await reserve(user, live.requestId);
+
+      expect(replay.status).toBe('completed');
+      expect(replay.message_id).toBeDefined();
+      expect(waiting.status).toBe('in_progress');
+      expect(await attempts(user)).toBe(n);
+    });
+
+    it('does not let a rate-limited request touch ad credits or other accounts\' usage', async () => {
+      const [a, b] = [await freshUser(), await freshUser()];
+      await makePremium(a);
+      await addAiCredit(a, 1);
+      const { attempts: n } = await settings();
+      for (let i = 0; i < n; i++) await runOnce(a);
+
+      await reserve(a);
+
+      expect(await aiUsed(a)).toBe(n);
+      expect(await aiUsed(b)).toBe(0);
+      expect((await admin.from('ad_credits').select('credits').eq('user_id', a.id)).data).toEqual([{ credits: 1 }]);
+    });
+
+    it('removes the attempts with the account', async () => {
+      const doomed = await createTestUser(admin, 'coach-rate');
+      await reserve(doomed);
+      expect(await attempts(doomed)).toBe(1);
+
+      await admin.auth.admin.deleteUser(doomed.id);
+
+      expect((await admin.from('coach_attempts').select('*', { count: 'exact', head: true }).eq('user_id', doomed.id)).count).toBe(0);
     });
   });
 
