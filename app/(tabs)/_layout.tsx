@@ -17,6 +17,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="today" options={{ title: t('today.title') }} />
       <Tabs.Screen name="workout" options={{ title: t('tabs.workout') }} />
       <Tabs.Screen name="food" options={{ title: t('tabs.food') }} />
+      <Tabs.Screen name="coach" options={{ title: t('tabs.coach') }} />
       <Tabs.Screen name="progress" options={{ title: t('tabs.progress') }} />
     </Tabs>
   );

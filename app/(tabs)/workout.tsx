@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { t } from '../../src/i18n';
@@ -9,6 +9,7 @@ import { useLocalDate } from '../../src/lib/useLocalDate';
 import { loadUnits } from '../../src/profile/cache';
 import { lbFromKg } from '../../src/onboarding/units';
 import { loadPlanBundle, PlanBundle } from '../../src/plan/planData';
+import { getPlanVersion } from '../../src/plan/planEvents';
 import { getPlanDay, planPhase } from '../../src/today/selectors';
 import { flushPending } from '../../src/sync/flush';
 import { supabaseTransport } from '../../src/sync/supabaseTransport';
@@ -35,6 +36,7 @@ export default function WorkoutScreen() {
   const userId = session?.user?.id;
   const [loading, setLoading] = useState(true);
   const [bundle, setBundle] = useState<PlanBundle | null>(null);
+  const seenPlanVersion = useRef(0); // the plan version the bundle on screen was read at
   const [limits, setLimits] = useState<LimitSnapshot | null>(null);
   const unlock = useUnlock({ rewardType: 'food' });
   const [units, setUnits] = useState<'metric' | 'imperial'>('metric');
@@ -61,6 +63,7 @@ export default function WorkoutScreen() {
     useCallback(() => {
       if (!userId) return;
       let alive = true;
+      const planVersion = getPlanVersion(userId);
       (async () => {
         try {
           const [planBundle, knownUnits, limitResult] = await Promise.all([
@@ -70,8 +73,14 @@ export default function WorkoutScreen() {
           ]);
           if (!alive) return;
           setLimits(limitResult?.snapshot ?? null);
-          // A failed refresh keeps the plan we already have instead of blanking the screen.
-          if (planBundle) setBundle(planBundle);
+          // A failed refresh keeps the plan we already have instead of blanking the screen, unless the plan has
+          // changed since (a coach proposal was accepted): then the old one is dropped, not shown as current.
+          if (planBundle) {
+            setBundle(planBundle);
+            seenPlanVersion.current = planVersion;
+          } else if (planVersion !== seenPlanVersion.current) {
+            setBundle(null);
+          }
           setUnits(knownUnits);
           await refreshSets();
         } finally {

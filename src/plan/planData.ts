@@ -84,6 +84,15 @@ export async function loadPlanBundle(userId: string): Promise<PlanBundle | null>
   }
 }
 
+// Reads the plan from the server and replaces the cached copy. Unlike loadPlanBundle it never falls back to the
+// cache: it is for the moment the plan is known to have changed (for example a coach proposal was accepted),
+// when showing the old copy as current would be wrong. A failure is thrown so the caller can say so.
+export async function refreshPlanBundle(userId: string): Promise<PlanBundle | null> {
+  const bundle = await fetchPlanBundle(userId);
+  if (bundle) await writeCache(userId, 'plan', bundle);
+  return bundle;
+}
+
 export async function loadLoggedSets(userId: string, date: string): Promise<LoggedSet[]> {
   const { data, error } = await supabase
     .from('workout_logs')

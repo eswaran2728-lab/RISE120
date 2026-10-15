@@ -2,8 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Small per-user cache of what the app last read from the server (plan, profile flags, today's
 // synced sets), so the app still works at the gym with no signal. Never shared between accounts.
-export type CacheName = 'plan' | 'profile' | 'units' | 'sets' | 'checkins' | 'recentFoods' | 'foodDay' | 'limits';
-const NAMES: CacheName[] = ['plan', 'profile', 'units', 'sets', 'checkins', 'recentFoods', 'foodDay', 'limits'];
+export type CacheName = 'plan' | 'profile' | 'units' | 'sets' | 'checkins' | 'recentFoods' | 'foodDay' | 'limits' | 'coach';
+const NAMES: CacheName[] = ['plan', 'profile', 'units', 'sets', 'checkins', 'recentFoods', 'foodDay', 'limits', 'coach'];
 
 const keyFor = (userId: string, name: CacheName) => `rise120.cache.${userId}.${name}`;
 
@@ -21,6 +21,15 @@ export async function writeCache(userId: string, name: CacheName, value: unknown
     await AsyncStorage.setItem(keyFor(userId, name), JSON.stringify(value));
   } catch {
     // The cache is a convenience; failing to write it must never break the app.
+  }
+}
+
+// Drops one cached entry for one account, for example the plan once it is known to be out of date.
+export async function clearCache(userId: string, name: CacheName): Promise<void> {
+  try {
+    await AsyncStorage.removeItem(keyFor(userId, name));
+  } catch {
+    // Nothing useful to do: the next read simply finds whatever is there.
   }
 }
 
