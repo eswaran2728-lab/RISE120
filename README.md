@@ -175,6 +175,12 @@ Run after the gates above and a fresh development build. Tick each only when it 
 - Account switch and sign-out: sign out and in as another account while the paywall or an ad is open; nothing from the first account appears for the second.
 - Delete account removes the user; a new sign-up starts on the free tier.
 
+## Phase 5: AI coach (in progress; not verified with a real provider)
+
+Built and tested so far: the coach ledger and atomic daily allowance, the provider interface with bounded context, versioned safety prompt, server-side proposal validator and Gemini adapter, the `ai-coach` and `decide-coach-proposal` edge functions (deployed to development only), and the multilingual Coach tab. **No real model has ever answered**: the Gemini secrets (`GEMINI_API_KEY`, `GEMINI_MODEL`) are unset, and nothing was run on a phone.
+
+Provider comparison: `npm run eval:coach` runs the same English, Malay and Tamil scenarios against more than one provider and writes an untracked scored report (safety, referral, grounding, proposal validity, language check, latency, estimated cost). By default it runs fixture mode with fictional data and scripted providers, which is **not** a real comparison. A live run needs consented, deidentified scenarios, two configured providers and `--confirm-paid-calls`; none exists yet. Details and exactly what remains: `docs/ai-coach-evaluation.md`.
+
 ## Edge functions
 
 Functions called by the app verify the caller's JWT inside the function (user id comes from the token only, never the body), so all functions are deployed with `--no-verify-jwt`. `revenuecat-webhook` and `grant-ad-reward` are called by RevenueCat and Google, which cannot send a Supabase JWT; they trust only their header secret or Google's signature:
