@@ -8,21 +8,21 @@ How to compare coach providers on the same English, Malay and Tamil scenarios, w
 
 | Claim | Level |
 | --- | --- |
-| Scenario gate (consent, deidentified, no identifying fields or photos, no contact details), equal scenario sets, scoring rules, safe report, no secrets or text in logs, live-mode safeguards | Automated tests with fictional data (`scripts/coach-eval/__tests__`) |
+| Scenario gate (strict value schemas for every field, no identifying fields, photos, contact details or identifying phrases, rejected values never logged), equal scenario sets, scoring rules, safe report, no secrets or text in logs, live-mode safeguards | Automated tests with fictional data (`scripts/coach-eval/__tests__`) |
 | The CLI runs end to end in fixture mode | Run locally with `npm run eval:coach` |
 | The Gemini and OpenAI-compatible adapters send the right request and map errors | Unit tests with a fake `fetch`. Gemini's adapter has never called the real API. The OpenAI-compatible adapter has never called any real endpoint |
 | Which provider is safer, more accurate in Malay or Tamil, faster or cheaper | **Not known.** Fixture "providers" are scripted. Their numbers say nothing about real models |
 | Current paid-tier terms, model IDs, prices, data-retention and training terms of Gemini or any gateway | **Not checked.** Read the official pages on the day you run live, and put the prices in the pricing file |
 | Whether OmniRoute (or any gateway) is acceptable for member data | **Not assessed** (see "OmniRoute" below) |
-| Ten consented, deidentified real scenarios | **Do not exist yet** |
+| Ten deidentified real scenarios with independently verified consent | **Do not exist yet** |
 
-A report only says `Real comparison: yes` for a **live** run with **two providers** and scenarios in **all three languages**. Everything else is labelled "not a real comparison".
+A report only says `Real comparison: yes` for a **live** run that has **ten scenarios** (at least three each in English, Malay and Tamil) and **two providers that each returned at least one usable answer in every language**. Attempts, successful answers and failures are counted separately per provider and per language. A run where every call failed has status `no_successful_responses`; any other shortfall is `incomplete`. Both say "not a real comparison", and the command exits with code 3. Fixture runs are always status `fixture`.
 
 ## Commands
 
 ```bash
 npm run eval:coach                       # fixture mode: no keys, no network, writes a report
-npm run eval:coach -- --live --confirm-paid-calls [--scenarios path] [--pricing path]
+npm run eval:coach -- --live --confirm-paid-calls --consent-verified [--scenarios path] [--pricing path]
 ```
 
 The script is `scripts/evaluate-coach.ts`, run through `scripts/run-ts.cjs` (a small TypeScript loader, because the Deno-style coach code cannot be loaded by Node's own type stripping). It needs nothing beyond the repo's dev dependencies.
@@ -31,13 +31,13 @@ Reports are written to `eval/reports/` as `.json` and `.md`. The whole `/eval/` 
 
 ## Fixture mode
 
-Runs nine fictional scenarios (three per language: a plan adjustment, a knee-injury referral, a progress question) through two scripted providers. `fixture-a` behaves well; `fixture-b` is deliberately flawed (an oversized calorie cut, training advice instead of a referral, English in a Malay scenario, a timeout, an invented number). Use it to check the tool and to see what a report looks like.
+Runs ten fictional scenarios (English four, Malay three, Tamil three: plan adjustments, a knee-injury referral and a progress question in each language) through two scripted providers. `fixture-a` behaves well; `fixture-b` is deliberately flawed (an oversized calorie cut, training advice instead of a referral, English in a Malay scenario, a timeout, an invented number). Use it to check the tool and to see what a report looks like.
 
 ## Live mode
 
 Live mode makes **paid** provider calls. It refuses to start unless all of this holds, and stops before any request otherwise:
 
-1. `--live` **and** `--confirm-paid-calls`.
+1. `--live`, `--confirm-paid-calls` **and** `--consent-verified`. The last one is you stating that each member's consent for this exact use was verified independently of the scenario file. The `consent: true` inside the file is only a declaration typed into it; the tool cannot check it.
 2. A scenario file at `eval/private/scenarios.json` (or `--scenarios`) that passes the gate below. One bad scenario rejects the whole file.
 3. Every variable set, in your shell only (never in Git or a chat):
    - `GEMINI_API_KEY`, `GEMINI_MODEL`
@@ -54,7 +54,7 @@ Both providers use the **same versioned prompts and the same parser/validator as
 
 ## Scenario file
 
-A JSON list. Each scenario must be consented and deidentified, and contain only these fields:
+A JSON list of exactly ten scenarios for a real comparison, with at least three in each language (for example four English, three Malay, three Tamil). Ten cannot be split equally three ways, so the rule is a minimum per language, not equal numbers. Every provider is run on the same ten. Each scenario must declare consent and deidentification, and contain only these fields:
 
 ```json
 {
@@ -82,9 +82,16 @@ A JSON list. Each scenario must be consented and deidentified, and contain only 
 
 `proposal` is `required`, `none` or `optional`. See `scripts/coach-eval/fixtures.ts` for a complete fictional set.
 
-**What is rejected** (the whole file, before any provider call): missing or false `consent`; `deidentified` not true; any identifying key (user id, plan id, email, name, phone, address, date of birth, IC/passport, location); any photo or image field; any unknown field; an email address, phone number, link, embedded image, image file name or account-id-like UUID inside the message; duplicate ids; a language other than `en`, `ms`, `ta`. Errors give the scenario id, a code and a field path, **never the value**.
+**What is rejected** (the whole file, before any provider call):
 
-Aim for ten scenarios with equal numbers in each language. A reviewer should deidentify real check-ins by hand and have the member's consent for this exact use.
+- Field names: any identifying key (user id, plan id, email, name, phone, address, date of birth, IC/passport, location), any photo or image field, any unknown field.
+- Field values, checked against strict runtime schemas that mirror the database: goal, training level, equipment, sex and activity level must be one of the known values; age 18-80 (whole), height 120-230 cm, weight 30-300 kg, mood 1-5, sleep 0-24 h; real calendar dates; UUIDs for ids; whole day numbers 1-120, sets and reps; short plain exercise names (60 characters, no line breaks). Wrong types (a string where a number belongs), out-of-range numbers, list sizes above the coach limits (10 check-ins, 14 plan days), workout exercises not in the scenario's own exercise list, and rest days that carry exercises are all rejected. What reaches a provider is rebuilt from the validated values, not copied from the file.
+- Free text (the message, exercise names and the expectation phrases): an email address, phone number, link, embedded image, image file name or UUID; a self-introduction ("my name is", "nama saya", Tamil equivalents); an address phrase or street address; an IC or passport number; a social handle; a long digit run; control characters; or text over the length limits.
+- Structure: missing or false `consent`, `deidentified` not true, duplicate ids, a language other than `en`, `ms`, `ta`.
+
+Errors give the scenario id, a code and a field path, **never the value**.
+
+A person must deidentify each real check-in by hand and confirm the member's consent for this exact use before it goes in the file. The checks above catch common slips, not everything: a bare first name or an unusual detail in the message passes them.
 
 ## What is scored
 
@@ -116,7 +123,7 @@ OmniRoute (https://github.com/diegosouzapw/OmniRoute) is a gateway that exposes 
 
 ## What remains before a real comparison
 
-1. Ten consented, deidentified scenarios (three languages), saved to `eval/private/scenarios.json`.
+1. Ten deidentified scenarios (at least three per language) with independently verified consent, saved to `eval/private/scenarios.json`.
 2. A Gemini paid-tier API key and current model ID, after reading the current terms (data use, retention, region).
 3. A second provider or gateway: base URL, key, model ID, terms.
 4. Official prices for both, in the pricing file, dated.

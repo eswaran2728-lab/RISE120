@@ -57,6 +57,10 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       deps.log('Live mode makes paid provider calls. Re-run with --confirm-paid-calls to proceed.');
       return 2;
     }
+    if (!argv.includes('--consent-verified')) {
+      deps.log('The consent flag inside the scenario file is only a declaration, not proof. Verify each member\'s consent for this use independently, then re-run with --consent-verified.');
+      return 2;
+    }
     const scenarioPath = option(argv, '--scenarios') ?? DEFAULT_SCENARIOS;
     try {
       scenariosRaw = JSON.parse(await deps.readFile(scenarioPath));
@@ -112,6 +116,12 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
   const base = `${REPORT_DIR}/coach-eval-${result.mode}-${stamp}`;
   await deps.writeFile(`${base}.json`, JSON.stringify(report.json, null, 2));
   await deps.writeFile(`${base}.md`, report.markdown);
-  deps.log(`Report written to ${base}.md and ${base}.json (untracked). Real comparison: ${report.json.realComparison ? 'yes' : 'no'}.`);
+  deps.log(`Report written to ${base}.md and ${base}.json (untracked). Status: ${report.json.status}. Real comparison: ${report.json.realComparison ? 'yes' : 'no'}.`);
+  // A live run that is not a real comparison (failed calls, missing languages, wrong scenario count) must not look
+  // like success to a script or a person skimming the terminal.
+  if (live && !report.json.realComparison) {
+    deps.log('This live run is not a real comparison; see the notes in the report.');
+    return 3;
+  }
   return 0;
 }

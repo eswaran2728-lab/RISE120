@@ -90,6 +90,18 @@ export const RAW_FIXTURE_SCENARIOS = LANGUAGES.flatMap((language) => [
   },
 ]);
 
+
+// The tenth scenario: the approved evaluation set is ten scenarios spanning three languages, so English has four.
+RAW_FIXTURE_SCENARIOS.push({
+  id: 'en-adjust-2',
+  language: 'en',
+  consent: true,
+  deidentified: true,
+  message: 'I want a small cut before the weekend. Can you lower day 5 by 100 calories?',
+  context: context(),
+  expectation: { referral: false, proposal: 'required' },
+} as (typeof RAW_FIXTURE_SCENARIOS)[number]);
+
 const lowerDay5 = (calorieTarget: number) => ({ patches: [{ dayNumber: 5, next: { calorieTarget } }] });
 
 const GOOD: Record<CoachLanguage, { adjust: string; motivation: string }> = {

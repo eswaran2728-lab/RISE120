@@ -74,11 +74,45 @@ describe('live mode safeguards', () => {
     expect(lines.join('\n')).toMatch(/confirm-paid-calls/);
   });
 
+  it('makes no provider call unless the operator attests that consent was verified independently of the file', async () => {
+    const fetcher = jest.fn();
+    const { deps, lines } = setup({ env: liveEnv, files, fetcher: fetcher as never });
+
+    const code = await runCli(['--live', '--confirm-paid-calls'], deps);
+
+    expect(code).toBe(2);
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(lines.join('\n')).toMatch(/consent-verified/);
+    expect(lines.join('\n')).toMatch(/declaration|not proof/i);
+  });
+
+  it('exits non-zero and says so when every provider call failed, and writes a report that does not claim a comparison', async () => {
+    const fetcher = jest.fn(async () => ({ ok: false, status: 503, json: async () => ({}) }));
+    const { deps, written, lines } = setup({ env: liveEnv, files, fetcher: fetcher as never });
+
+    const code = await runCli(['--live', '--confirm-paid-calls', '--consent-verified'], deps);
+
+    expect(code).toBe(3);
+    const json = JSON.parse(written[Object.keys(written).find((p) => p.endsWith('.json'))!]);
+    expect(json.status).toBe('no_successful_responses');
+    expect(json.realComparison).toBe(false);
+    expect(json.summary.every((s: { succeeded: number }) => s.succeeded === 0)).toBe(true);
+    expect(lines.join('\n')).toMatch(/not a real comparison/i);
+  });
+
+  it('exits non-zero when a live run is incomplete', async () => {
+    const fetcher = jest.fn(async (url: string) => ({ ok: true, status: 200, json: async () => goodAnswer(url) }));
+    const nine = JSON.stringify(RAW_FIXTURE_SCENARIOS.slice(0, 9));
+    const { deps } = setup({ env: liveEnv, files: { [scenarioFile]: nine }, fetcher: fetcher as never });
+
+    expect(await runCli(['--live', '--confirm-paid-calls', '--consent-verified'], deps)).toBe(3);
+  });
+
   it('refuses when the consented scenario file is missing, and says where it is expected', async () => {
     const fetcher = jest.fn();
     const { deps, lines } = setup({ env: liveEnv, fetcher: fetcher as never });
 
-    const code = await runCli(['--live', '--confirm-paid-calls'], deps);
+    const code = await runCli(['--live', '--confirm-paid-calls', '--consent-verified'], deps);
 
     expect(code).toBe(2);
     expect(fetcher).not.toHaveBeenCalled();
@@ -90,7 +124,7 @@ describe('live mode safeguards', () => {
     const { EVAL_SECOND_API_KEY: _omit, ...partial } = liveEnv;
     const { deps, lines } = setup({ env: partial, files, fetcher: fetcher as never });
 
-    const code = await runCli(['--live', '--confirm-paid-calls'], deps);
+    const code = await runCli(['--live', '--confirm-paid-calls', '--consent-verified'], deps);
 
     expect(code).toBe(2);
     expect(fetcher).not.toHaveBeenCalled();
@@ -105,7 +139,7 @@ describe('live mode safeguards', () => {
     const fetcher = jest.fn();
     const { deps, lines } = setup({ env: liveEnv, files: { [scenarioFile]: JSON.stringify(bad) }, fetcher: fetcher as never });
 
-    const code = await runCli(['--live', '--confirm-paid-calls'], deps);
+    const code = await runCli(['--live', '--confirm-paid-calls', '--consent-verified'], deps);
 
     expect(code).toBe(2);
     expect(fetcher).not.toHaveBeenCalled();
@@ -117,7 +151,7 @@ describe('live mode safeguards', () => {
     const fetcher = jest.fn(async (url: string) => ({ ok: true, status: 200, json: async () => goodAnswer(url) }));
     const { deps, written, lines } = setup({ env: liveEnv, files, fetcher: fetcher as never });
 
-    const code = await runCli(['--live', '--confirm-paid-calls'], deps);
+    const code = await runCli(['--live', '--confirm-paid-calls', '--consent-verified'], deps);
 
     expect(code).toBe(0);
     expect(fetcher).toHaveBeenCalledTimes(RAW_FIXTURE_SCENARIOS.length * 2);
@@ -136,7 +170,7 @@ describe('live mode safeguards', () => {
     const pricing = JSON.stringify({ gemini: { currency: 'USD', inputPerMTok: 0.1, outputPerMTok: 0.4 } });
     const { deps, written } = setup({ env: liveEnv, files: { ...files, 'eval/private/pricing.json': pricing }, fetcher: fetcher as never });
 
-    await runCli(['--live', '--confirm-paid-calls', '--pricing', 'eval/private/pricing.json'], deps);
+    await runCli(['--live', '--confirm-paid-calls', '--consent-verified', '--pricing', 'eval/private/pricing.json'], deps);
 
     const json = JSON.parse(written[Object.keys(written).find((p) => p.endsWith('.json'))!]);
     const summary = (name: string) => json.summary.find((s: { provider: string }) => s.provider === name);

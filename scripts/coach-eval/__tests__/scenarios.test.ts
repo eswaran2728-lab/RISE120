@@ -15,13 +15,12 @@ function problemsOf(raw: unknown) {
 }
 
 describe('scenario file', () => {
-  it('accepts the fictional fixture scenarios and covers English, Malay and Tamil equally', () => {
+  it('accepts the fictional fixture set: ten scenarios, at least three in each of English, Malay and Tamil', () => {
     const scenarios = parseScenarios(RAW_FIXTURE_SCENARIOS);
 
     const perLanguage = (code: string) => scenarios.filter((s) => s.language === code).length;
-    expect(perLanguage('en')).toBeGreaterThan(0);
-    expect(perLanguage('ms')).toBe(perLanguage('en'));
-    expect(perLanguage('ta')).toBe(perLanguage('en'));
+    expect(scenarios).toHaveLength(10);
+    for (const code of ['en', 'ms', 'ta']) expect(perLanguage(code)).toBeGreaterThanOrEqual(3);
   });
 
   it('turns a scenario into the same context shape the coach gets', () => {

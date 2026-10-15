@@ -1,27 +1,35 @@
 // Builds the scored report. It holds ids, verdicts, timings and cost only: no message, reply, prompt or error
 // text exists in an EvalResult, so none can leak into the file. It refuses to compare providers that did not see
-// the same scenarios, and only calls a run a real comparison when it was live, had two providers and covered
-// English, Malay and Tamil.
-import { COACH_LANGUAGES } from '../../supabase/functions/_shared/coach/types.ts';
+// the same scenarios, and it counts attempts, successful answers and failures separately: a run where calls
+// failed is never described as a successful comparison.
 import type { EvalResult } from './run.ts';
 import type { ScoreRow } from './score.ts';
 
+type LanguageCounts = { attempted: number; succeeded: number; failed: number };
+
 export interface ProviderSummary {
   provider: string;
-  scenarios: number;
-  errors: number;
-  failures: number; // scenarios with at least one failed check
-  medianLatencyMs: number | null;
-  totalCost: number | null;
+  attempted: number;
+  succeeded: number; // a usable answer came back (a safe refusal counts)
+  failed: number; // timeout, HTTP error or unusable reply
+  byLanguage: Record<'en' | 'ms' | 'ta', LanguageCounts>;
+  scenariosWithFailedCheck: number; // answered, but at least one scored check failed
+  medianLatencyMs: number | null; // successful calls only
+  failedMedianLatencyMs: number | null;
+  totalCost: number | null; // successful calls only
   costCurrency: string | null;
   costBasis: 'estimated' | 'unpriced' | 'none';
 }
 
+export type ReportStatus = 'fixture' | 'no_successful_responses' | 'incomplete' | 'real';
+
 export interface Report {
   json: {
     mode: EvalResult['mode'];
+    status: ReportStatus;
     realComparison: boolean;
     notes: string[];
+    reviews: { nativeSpeaker: 'not_recorded' };
     providers: string[];
     scenarios: EvalResult['scenarios'];
     summary: ProviderSummary[];
@@ -29,6 +37,12 @@ export interface Report {
   };
   markdown: string;
 }
+
+// The approved evaluation set: ten scenarios spanning English, Malay and Tamil (at least three of each).
+export const REQUIRED_SCENARIOS = 10;
+export const MIN_PER_LANGUAGE = 3;
+
+const LANGS = ['en', 'ms', 'ta'] as const;
 
 export function assertEqualScenarioSets(result: EvalResult): void {
   const expected = result.scenarios.map((s) => s.id);
@@ -45,21 +59,30 @@ const median = (values: number[]) => {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 };
 
-const bad = (row: ScoreRow) => [row.safety, row.referral, row.grounding, row.proposal, row.languageCheck].some((v) => v === 'fail' || v === 'error');
+const failedCheck = (row: ScoreRow) => [row.safety, row.referral, row.grounding, row.proposal, row.languageCheck].some((v) => v === 'fail');
 
 function summarize(provider: string, rows: ScoreRow[]): ProviderSummary {
   const mine = rows.filter((row) => row.provider === provider);
-  const priced = mine.filter((row) => row.cost !== null);
-  const basis = priced.length > 0 ? 'estimated' : mine.some((row) => row.costBasis === 'unpriced') ? 'unpriced' : 'none';
+  const ok = mine.filter((row) => row.status === 'ok');
+  const bad = mine.filter((row) => row.status === 'error');
+  const priced = ok.filter((row) => row.cost !== null);
+  const counts = (language: string): LanguageCounts => {
+    const inLanguage = mine.filter((row) => row.language === language);
+    const succeeded = inLanguage.filter((row) => row.status === 'ok').length;
+    return { attempted: inLanguage.length, succeeded, failed: inLanguage.length - succeeded };
+  };
   return {
     provider,
-    scenarios: mine.length,
-    errors: mine.filter((row) => row.status === 'error').length,
-    failures: mine.filter(bad).length,
-    medianLatencyMs: median(mine.map((row) => row.latencyMs)),
+    attempted: mine.length,
+    succeeded: ok.length,
+    failed: bad.length,
+    byLanguage: { en: counts('en'), ms: counts('ms'), ta: counts('ta') },
+    scenariosWithFailedCheck: ok.filter(failedCheck).length,
+    medianLatencyMs: median(ok.map((row) => row.latencyMs)),
+    failedMedianLatencyMs: median(bad.map((row) => row.latencyMs)),
     totalCost: priced.length > 0 ? priced.reduce((sum, row) => sum + (row.cost ?? 0), 0) : null,
     costCurrency: priced[0]?.costCurrency ?? null,
-    costBasis: basis,
+    costBasis: priced.length > 0 ? 'estimated' : ok.some((row) => row.costBasis === 'unpriced') ? 'unpriced' : 'none',
   };
 }
 
@@ -68,35 +91,83 @@ const cell = (value: string | number | null) => (value === null ? '-' : String(v
 export function buildReport(result: EvalResult): Report {
   assertEqualScenarioSets(result);
 
-  const languages = new Set(result.scenarios.map((s) => s.language));
-  const allLanguages = COACH_LANGUAGES.every((code) => languages.has(code));
-  const realComparison = result.mode === 'live' && result.providers.length >= 2 && allLanguages;
+  const summary = result.providers.map((provider) => summarize(provider, result.rows));
+  const perLanguage: Record<string, number> = Object.fromEntries(LANGS.map((code) => [code, result.scenarios.filter((s) => s.language === code).length]));
+  const coverageOk = result.scenarios.length === REQUIRED_SCENARIOS && LANGS.every((code) => perLanguage[code] >= MIN_PER_LANGUAGE);
+  // A provider must have answered at least once in every language, or the comparison says nothing about it there.
+  const everyProviderAnsweredEverywhere = summary.length >= 2 && summary.every((s) => LANGS.every((code) => s.byLanguage[code].succeeded > 0));
+  const totalSucceeded = summary.reduce((sum, s) => sum + s.succeeded, 0);
+
+  const realComparison = result.mode === 'live' && coverageOk && everyProviderAnsweredEverywhere;
+  const status: ReportStatus = result.mode === 'fixture' ? 'fixture' : realComparison ? 'real' : totalSucceeded === 0 ? 'no_successful_responses' : 'incomplete';
 
   const notes: string[] = [];
   if (result.mode === 'fixture') notes.push('Fixture run: scripted fictional providers and scenarios. This is not a real comparison; it only shows the tooling works.');
-  if (result.mode === 'live' && result.providers.length < 2) notes.push('Only one provider ran, so this is not a real comparison.');
-  if (result.mode === 'live' && !allLanguages) notes.push('English, Malay and Tamil were not all covered, so this is not a real comparison.');
-  notes.push('Token counts are estimated from character counts (about 4 characters per token) and understate Malay and Tamil; cost uses the prices you supplied, or is shown as unpriced.');
-  notes.push('Language quality is a script and vocabulary check only. A native speaker must review fluency; use the reviewer notes column.');
+  if (result.mode === 'live') {
+    if (status === 'no_successful_responses') notes.push('No successful responses: no provider returned a usable answer, so this is not a real comparison.');
+    if (summary.length < 2) notes.push('Only one provider ran, so this is not a real comparison.');
+    if (!coverageOk) {
+      notes.push(
+        `The approved set is ${REQUIRED_SCENARIOS} scenarios with at least ${MIN_PER_LANGUAGE} each in English, Malay and Tamil; this run had ${result.scenarios.length} (en ${perLanguage.en}, ms ${perLanguage.ms}, ta ${perLanguage.ta}), so it is not a real comparison.`
+      );
+    }
+    for (const s of summary) {
+      const silent = LANGS.filter((code) => s.byLanguage[code].succeeded === 0);
+      if (silent.length > 0 && totalSucceeded > 0) notes.push(`${s.provider} gave no successful response in ${silent.join(', ')}, so this is not a real comparison.`);
+      if (s.failed > 0) notes.push(`${s.provider}: ${s.failed} failed call${s.failed === 1 ? '' : 's'} of ${s.attempted} attempted (${s.succeeded} succeeded).`);
+    }
+  }
+  notes.push('Native-speaker review of Malay and Tamil replies has not been recorded by this tool. The language check is a script and vocabulary rule only; use the reviewer notes column.');
+  notes.push('Consent in the scenario file is a declaration typed into the file, not proof. It must be verified independently of this tool before real member data is used.');
+  notes.push('Latency is one call per scenario (no repeats) and noisy. Median latency counts successful calls only; failed calls are reported separately.');
+  notes.push('Token counts are estimated from character counts (about 4 characters per token) and understate Malay and Tamil. Cost is an estimate from the prices you supplied over successful calls, or shown as unpriced. It is not a bill.');
 
-  const summary = result.providers.map((provider) => summarize(provider, result.rows));
-  const json = { mode: result.mode, realComparison, notes, providers: result.providers, scenarios: result.scenarios, summary, rows: result.rows };
+  const json = {
+    mode: result.mode,
+    status,
+    realComparison,
+    notes,
+    reviews: { nativeSpeaker: 'not_recorded' as const },
+    providers: result.providers,
+    scenarios: result.scenarios,
+    summary,
+    rows: result.rows,
+  };
 
-  const lines: string[] = ['# Coach provider evaluation', '', `Mode: ${result.mode}. Real comparison: ${realComparison ? 'yes' : 'no'}.`, ''];
+  const lines: string[] = [
+    '# Coach provider evaluation',
+    '',
+    `Mode: ${result.mode}. Status: ${status}. Real comparison: ${realComparison ? 'yes' : 'no (this is not a real comparison)'}.`,
+    '',
+  ];
   for (const note of notes) lines.push(`- ${note}`);
-  lines.push('', '## Summary', '', '| Provider | Scenarios | Errors | Scenarios with a failed check | Median latency (ms) | Cost | Basis |', '| --- | --- | --- | --- | --- | --- | --- |');
+  lines.push(
+    '',
+    '## Summary',
+    '',
+    '| Provider | Attempted | Succeeded | Failed | Answered with a failed check | en ok/attempted | ms ok/attempted | ta ok/attempted | Median latency, successful (ms) | Median latency, failed (ms) | Cost | Basis |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+  );
   for (const s of summary) {
     const cost = s.totalCost === null ? '-' : `${s.totalCost.toFixed(6)} ${s.costCurrency ?? ''}`.trim();
-    lines.push(`| ${s.provider} | ${s.scenarios} | ${s.errors} | ${s.failures} | ${cell(s.medianLatencyMs)} | ${cost} | ${s.costBasis} |`);
+    const lang = (code: (typeof LANGS)[number]) => `${s.byLanguage[code].succeeded}/${s.byLanguage[code].attempted}`;
+    lines.push(
+      `| ${s.provider} | ${s.attempted} | ${s.succeeded} | ${s.failed} | ${s.scenariosWithFailedCheck} | ${lang('en')} | ${lang('ms')} | ${lang('ta')} | ${cell(s.medianLatencyMs)} | ${cell(s.failedMedianLatencyMs)} | ${cost} | ${s.costBasis} |`
+    );
   }
-  lines.push('', '## Scenarios', '', '| Provider | Scenario | Language | Safety | Referral | Grounding | Proposal | Language check | Latency (ms) | Cost | Reviewer notes |', '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |');
+  lines.push(
+    '',
+    '## Scenarios',
+    '',
+    '| Provider | Scenario | Language | Safety | Referral | Grounding | Proposal | Language check | Latency (ms) | Cost | Reviewer notes |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+  );
   for (const row of result.rows) {
     const cost = row.cost === null ? '-' : `${row.cost.toFixed(6)} ${row.costCurrency ?? ''}`.trim();
-    const verdicts = row.status === 'error' ? `error: ${row.errorKind}` : [row.safety, row.referral, row.grounding, row.proposal, row.languageCheck].join(' | ');
     lines.push(
       row.status === 'error'
-        ? `| ${row.provider} | ${row.scenarioId} | ${row.language} | ${verdicts} | | | | | ${row.latencyMs} | - | ${row.reviewerNotes} |`
-        : `| ${row.provider} | ${row.scenarioId} | ${row.language} | ${verdicts} | ${row.latencyMs} | ${cost} | ${row.reviewerNotes} |`
+        ? `| ${row.provider} | ${row.scenarioId} | ${row.language} | error: ${row.errorKind} | | | | | ${row.latencyMs} | - | ${row.reviewerNotes} |`
+        : `| ${row.provider} | ${row.scenarioId} | ${row.language} | ${[row.safety, row.referral, row.grounding, row.proposal, row.languageCheck].join(' | ')} | ${row.latencyMs} | ${cost} | ${row.reviewerNotes} |`
     );
   }
   return { json, markdown: lines.join('\n') + '\n' };
