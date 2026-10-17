@@ -17,5 +17,6 @@ void registerPlugin(initReactI18next).init({
   interpolation: { escapeValue: false },
 });
 
-export const t = (key: string): string => translate(key);
+// Optional values fill {{name}} placeholders in a translation, so word order can differ by language.
+export const t = (key: string, values?: Record<string, string | number>): string => (values ? translate(key, values) : translate(key));
 export default i18next;
