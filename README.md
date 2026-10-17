@@ -175,11 +175,67 @@ Run after the gates above and a fresh development build. Tick each only when it 
 - Account switch and sign-out: sign out and in as another account while the paywall or an ad is open; nothing from the first account appears for the second.
 - Delete account removes the user; a new sign-up starts on the free tier.
 
-## Phase 5: AI coach (in progress; not verified with a real provider)
+## Phase 5: AI coach (code complete; no real provider, no phone)
 
-Built and tested so far: the coach ledger and atomic daily allowance, the provider interface with bounded context, versioned safety prompt, server-side proposal validator and Gemini adapter, the `ai-coach` and `decide-coach-proposal` edge functions (deployed to development only), and the multilingual Coach tab. **No real model has ever answered**: the Gemini secrets (`GEMINI_API_KEY`, `GEMINI_MODEL`) are unset, and nothing was run on a phone.
+A Coach tab where a member asks a question in English, Malay or Tamil and may get a small, reviewable adjustment to their future plan days. **No real model has ever answered**: the Gemini secrets (`GEMINI_API_KEY`, `GEMINI_MODEL`) are unset on every project, and nothing in Phase 5 has run on a phone. See "Phase 5 verification levels" and "Phase 5 open gates".
 
-Provider comparison: `npm run eval:coach` runs the same English, Malay and Tamil scenarios against more than one provider and writes an untracked scored report (safety, referral, grounding, proposal validity, language check, latency, estimated cost). By default it runs fixture mode with fictional data and scripted providers, which is **not** a real comparison. A live run needs ten deidentified scenarios with independently verified consent, two configured providers, `--confirm-paid-calls` and `--consent-verified`, and it only reports a real comparison when both providers answered in all three languages; none has run yet. Details and exactly what remains: `docs/ai-coach-evaluation.md`.
+### How it works
+
+- **The server decides everything.** `ai-coach` takes the account from the verified JWT (never the body), reserves the request in a ledger, builds a bounded context, calls the provider, validates the answer, and stores it. The app only displays what it returns.
+- **Allowance.** Free members get the `app_config` AI messages per UTC day (1 initially) plus verified rewarded-ad credits; premium is unlimited. Admission is atomic per user, so two requests for the last slot cannot both win. **A failed request is not charged.** A late finish after a lease expired succeeds only if its slot is still free; otherwise the reply is discarded and never shown as successful (`slot_taken`).
+- **Retries and unknown outcomes.** The same request id returns the stored answer and never calls the provider twice. If a provider call may have been processed but the answer was lost (timeout), the server reports an unknown outcome and does not regenerate it by itself; the app offers Check again (same id) and, as a separate explicit tap, Ask again (new id). Nothing is queued offline and nothing repeats a model call automatically.
+- **Rate guard.** Separate from the daily allowance: at most 5 provider starts per rolling minute and 1 active provider request per account (`app_config`), for free and premium alike. A limited request calls no provider and spends no allowance; the answer carries a server-generated `retryAt`.
+- **What the model sees.** Goal, level, equipment, weight, up to 10 recent check-in numbers and the editable plan days, plus the member's message. Never a user id, email, name, photo, food preference or plan id. The prompt is versioned (`coach-2026-10-14.1`).
+- **Proposals are checked, not trusted.** The model's output is parsed against an allowlist and validated against the member's real plan: existing exercises of the member's equipment and movement pattern, the rest-day structure, sets within 1 and reps within 2, calories within 250 in steps of 50 and never below 1,500, protein 1.6 to 2.0 g per kg. Only days from plan day today+2 to today+14 (by UTC) that the member can currently open are eligible. One bad patch drops the whole proposal; the reply text may stay.
+- **Accepting is a database transaction.** `decide-coach-proposal` accepts only `{proposalId, decision}`, loads the stored patch (never one from the client), locks the proposal and affected days, rechecks ownership, pending status, access, eligibility, expected prior values and the same exercise and nutrition rules, and applies all days or none. Repeating a decision is idempotent; the opposite decision is refused; a proposal that no longer fits is marked stale and changes nothing. Declining changes no day.
+- **After acceptance** the app drops that account's plan cache, reads the plan strictly from the server, and Today, Workout and Food read the new values. If that refresh fails the accepted decision stays visible with a Refresh plan retry, and old cached values are never described as current.
+- **Account safety.** Coach state, cached history and late responses are tied to the signed-in account; a late answer for account A is dropped after switching to B. The coach cache is cleared on account deletion. Server tables are readable by their owner only (row-level security); every write goes through server functions.
+- **Strings.** All text is in English, Malay and Tamil through `t()`.
+
+### Phase 5 server pieces
+
+- Tables: `coach_requests`, `coach_messages`, `coach_proposals`, `coach_attempts` (RLS on; clients can only `select` their own rows from the first three and nothing from `coach_attempts`).
+- Functions: `public.coach_reserve_request`, `coach_finish_request`, `coach_fail_request` and `coach_decide_proposal` (security definer, executable by the service role only; `anon` and `authenticated` cannot call them), with their `private.*` implementations.
+- Edge functions: `ai-coach` and `decide-coach-proposal`, deployed with `--no-verify-jwt` and verifying the JWT inside.
+- `app_config` keys: `coach_rate_limit_attempts`, `coach_rate_limit_window_seconds`, `coach_max_active_requests`, plus the existing AI allowance keys.
+
+### Phase 5 verification levels
+
+These are four different things; only the first two have happened.
+
+1. **Mocked tests (Jest, no network).** Provider adapter against a fake `fetch`; prompt, context and validator rules; the request handler with a fake provider (idempotency, unknown outcome, failed call not charged, `slot_taken`, rate limit); the Coach screen and hook with mocked services (duplicate taps, proposal decisions, failed plan refresh, offline history, rate-limit countdown, a late account-A response after switching to B); the tab layout.
+2. **Live Rise120 development-database tests (`supabase/tests/`, project `kozskxoiyrzrokjmcqeo`).** Ledger and atomic allowance including concurrency, lease expiry, server-configured limits, ad credits, premium expiry, account isolation, blocked client writes and account deletion; the deployed `ai-coach` and `decide-coach-proposal` functions with a **fake provider path only**; the proposal decision function including all-or-nothing, stale, idempotency, concurrent accepts, and a differential test that the SQL rules and the TypeScript validator decide the same cases.
+3. **Real provider: not run.** No Gemini or other model has answered through `ai-coach`; model quality, real latency and cost, Malay and Tamil reply quality, and safety refusals are unknown. The provider comparison tool (`npm run eval:coach`) exists and is tested in fixture mode only; see `docs/ai-coach-evaluation.md`.
+4. **Phone: not run.** Layout, keyboard behaviour, the proposal card, the tab icon, the retry countdown and everything in the checklist below have been seen only as rendered test components.
+
+### Phase 5 known limitations
+
+- If the phone goes offline after an acceptance and before the plan refresh, Today shows its retry state and Workout shows "plan not ready" until it reconnects. It does not keep showing the old plan.
+- The app cannot tell a request that never left the phone from one that reached the server, so an offline send is treated as uncertain and Check again reuses the request id.
+- A provider refusal is shown like any reply (the referral text) and is charged one message.
+- Nothing notifies the member when a proposal becomes stale; it is found when they open the tab or tap Accept.
+- Live database suites are slow and can time out under load on the shared development project. Each passes when run alone; running many in one go can fail with timeouts. Test accounts from interrupted runs accumulate in the development project (they use `label-<timestamp>-<random>@example.com`) and can be removed with a pattern-matched cleanup.
+- Malay and Tamil strings were drafted by an AI agent and need native review.
+
+### Phase 5 open gates
+
+1. **Gemini (paid API project):** set Supabase secrets `GEMINI_API_KEY` and `GEMINI_MODEL` on the development project only after reading the current paid-tier terms, model availability and prices. Never in Git or a chat.
+2. **Real comparison:** ten deidentified scenarios with independently verified consent, a second provider, dated prices, native-speaker review, a written provider decision (`docs/ai-coach-evaluation.md`).
+3. **Phone pass** (below), on a fresh development build.
+4. Production deployment of the coach is a separate, later decision; nothing here touches another project.
+
+### Phase 5 phone checklist (not run yet)
+
+Run after the Gemini secrets are set on development and a fresh development build is installed. Tick each only when seen on a phone.
+
+- Coach is the fourth tab. Ask a question in English, then Malay, then Tamil (switch the app language each time); the reply is in that language and is not cut off.
+- Free account: one message works and the allowance reads used; the second shows the limit with the reset time, and the draft is kept. Watch a rewarded ad, see "being verified", and then one more message becomes available (this needs the Phase 4 AdMob setup). A premium account shows no limit.
+- Kill the network mid-send (airplane mode just after tapping Send): the app shows an uncertain result with Check again, not an error that invites a second charge; Check again after reconnecting returns the stored answer or says it is still working; the allowance is charged at most once.
+- Send several messages quickly: the rate-limit notice appears with a countdown, Send is disabled until it ends, and nothing is sent by itself.
+- Ask for a plan change (for example lowering calories on a day a few days ahead): the proposal card shows the day numbers and dates and exact before and after values. Decline changes nothing. Accept changes exactly those days; Today, Workout and Food then show the new values. Switch to airplane mode and accept another proposal: the accepted state stays visible with Refresh plan, and the old values are not shown as current.
+- Ask about an injury or medical problem: the reply refers to a professional and offers no plan change.
+- Open the Coach tab in airplane mode: the saved history shows with an offline notice.
+- Sign out and in as another account while a reply is loading: nothing from the first account appears for the second. Delete the account: history is gone and a new sign-up starts empty.
 
 ## Edge functions
 
@@ -202,6 +258,8 @@ npx supabase functions deploy request-ad-reward --project-ref <project-ref> --no
 npx supabase functions deploy grant-ad-reward --project-ref <project-ref> --no-verify-jwt --use-api
 ```
 
+- `supabase/functions/ai-coach` answers a coach question for the calling user: server allowance, rate guard, idempotent request ids, validated proposals (Phase 5). Needs the `GEMINI_API_KEY` and `GEMINI_MODEL` secrets, which are unset.
+- `supabase/functions/decide-coach-proposal` accepts or declines a stored coach proposal in one transaction (Phase 5).
 Deploy and run the database tests against a development project only.
 
 ## Tests and checks
