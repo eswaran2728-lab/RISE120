@@ -76,7 +76,7 @@ export async function loadCoachContext(db: Db, userId: string, now: Date = new D
     equipment: row.equipment as string,
   }));
 
-  const plan = await db.from('plans').select('id, start_date').eq('user_id', userId).maybeSingle();
+  const plan = await db.from('plans').select('id, start_date').eq('user_id', userId).eq('status', 'active').order('cycle_number', { ascending: false }).limit(1).maybeSingle();
   if (!plan.data) return { ...empty, exercises };
 
   const today = now.toISOString().slice(0, 10);

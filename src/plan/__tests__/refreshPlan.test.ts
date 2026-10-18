@@ -17,7 +17,7 @@ function serve(options: { plan?: unknown; fail?: boolean } = {}) {
   (supabase.from as jest.Mock).mockImplementation((table: string) => {
     const result = (data: unknown) => ({ data, error: options.fail ? { message: 'offline' } : null });
     const q: Record<string, unknown> = {};
-    for (const name of ['select', 'eq', 'order']) q[name] = () => q;
+    for (const name of ['select', 'eq', 'order', 'limit']) q[name] = () => q;
     q.maybeSingle = async () => result(table === 'plans' ? (options.plan === undefined ? planRow : options.plan) : null);
     (q as { then: (r: (v: unknown) => void) => void }).then = (resolve) => resolve(result(table === 'plan_days' ? dayRows : exerciseRows));
     return q;

@@ -4,6 +4,7 @@ export interface Plan {
   id: string;
   startDate: LocalDate;
   status: string;
+  cycleNumber?: number; // 1 for the first cycle; absent in plans saved before cycles existed
 }
 
 export interface WorkoutEntry {

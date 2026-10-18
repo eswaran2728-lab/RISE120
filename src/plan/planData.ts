@@ -5,7 +5,7 @@ import type { Exercise, Plan, PlanDay, PlanWorkout } from './types';
 
 type Row = Record<string, any>;
 
-export const mapPlan = (row: Row): Plan => ({ id: row.id, startDate: row.start_date, status: row.status });
+export const mapPlan = (row: Row): Plan => ({ id: row.id, startDate: row.start_date, status: row.status, cycleNumber: row.cycle_number ?? 1 });
 
 function mapWorkout(value: unknown): PlanWorkout {
   const workout = value as { kind?: string; exercises?: unknown } | null;
@@ -45,8 +45,11 @@ export interface PlanBundle {
 async function fetchPlanBundle(userId: string): Promise<PlanBundle | null> {
   const { data: planRow, error: planError } = await supabase
     .from('plans')
-    .select('id, start_date, status')
+    .select('id, start_date, status, cycle_number')
     .eq('user_id', userId)
+    .eq('status', 'active') // a finished cycle stays stored but is never the plan on screen
+    .order('cycle_number', { ascending: false })
+    .limit(1)
     .maybeSingle();
   if (planError) throw new Error(planError.message);
   if (!planRow) return null;

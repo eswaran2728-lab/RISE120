@@ -69,7 +69,7 @@ const profileRow = (over: Row = {}): Row => ({
   activity_level: 'light',
   ...over,
 });
-const planRow: Row = { id: 'plan-1', user_id: USER, start_date: START };
+const planRow: Row = { id: 'plan-1', user_id: USER, start_date: START, status: 'active', cycle_number: 1 };
 const dayRow = (n: number, over: Row = {}): Row => ({
   user_id: USER,
   plan_id: 'plan-1',
@@ -127,7 +127,7 @@ describe('loadCoachContext', () => {
     const db = fakeDb(
       world({
         profiles: [profileRow(), profileRow({ id: OTHER, language: 'ta', weight_kg: 99 })],
-        plans: [planRow, { id: 'plan-2', user_id: OTHER, start_date: '2020-01-01' }],
+        plans: [planRow, { id: 'plan-2', user_id: OTHER, start_date: '2020-01-01', status: 'active', cycle_number: 1 }],
         checkins: [checkinRow('2026-10-17'), checkinRow('2026-10-17', { user_id: OTHER, weight_kg: 123 })],
         plan_days: [...days(1, 120), ...days(1, 120).map((d) => ({ ...d, user_id: OTHER, plan_id: 'plan-2', calorie_target: 9999 }))],
       })
@@ -213,6 +213,14 @@ describe('loadCoachContext', () => {
   });
 
   it('offers nothing once the plan has finished or before it starts opening days', async () => {
+    // A finished earlier cycle never shadows the active one (roadmap B3).
+    const twoCycles = await loadCoachContext(
+      fakeDb(world({ plans: [{ ...planRow, id: 'plan-0', start_date: '2025-01-01', status: 'completed', cycle_number: 1 }, { ...planRow, id: 'plan-3', cycle_number: 2 }] })),
+      USER,
+      NOW
+    );
+    expect(twoCycles.todayDayNumber).toBe(3);
+
     const finished = await loadCoachContext(fakeDb(world({ plans: [{ ...planRow, start_date: '2026-01-01' }] })), USER, NOW);
     expect(finished.planDays).toEqual([]);
 

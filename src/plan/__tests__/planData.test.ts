@@ -14,6 +14,7 @@ describe('plan row mappers', () => {
       id: 'p1',
       startDate: '2026-10-13',
       status: 'active',
+      cycleNumber: 1,
     });
   });
 
@@ -55,14 +56,16 @@ describe('loadPlanBundle offline cache', () => {
       if (options.fail === 'throw') throw new Error('Network request failed');
       if (table === 'plans') {
         return {
-          select: () => ({
-            eq: () => ({
-              maybeSingle: async () =>
-                options.fail === 'plan'
-                  ? { data: null, error: { message: 'Network request failed' } }
-                  : { data: options.plan === undefined ? planRow : options.plan, error: null },
-            }),
-          }),
+          // The app asks for the active plan: eq(user), eq(status), order(cycle), limit(1), then one row.
+          select: () => {
+            const q: Record<string, unknown> = {};
+            for (const name of ['eq', 'order', 'limit']) q[name] = () => q;
+            q.maybeSingle = async () =>
+              options.fail === 'plan'
+                ? { data: null, error: { message: 'Network request failed' } }
+                : { data: options.plan === undefined ? planRow : options.plan, error: null };
+            return q;
+          },
         };
       }
       if (table === 'plan_days') return { select: () => ({ eq: () => ({ order: async () => ({ data: dayRows, error: null }) }) }) };
