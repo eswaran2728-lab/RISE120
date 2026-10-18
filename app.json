@@ -39,6 +39,7 @@
         }
       ],
       "expo-localization",
+      "expo-notifications",
       "@react-native-google-signin/google-signin",
       ["expo-image-picker", { "cameraPermission": false, "microphonePermission": false }],
       ["expo-camera", { "cameraPermission": "Allow Rise120 to use the camera to scan food barcodes.", "recordAudioAndroid": false }]

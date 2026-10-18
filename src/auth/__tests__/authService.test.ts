@@ -6,7 +6,10 @@ import { enqueue, listPending } from '../../sync/queue';
 import { removeLocalPhotos } from '../../checkin/photos';
 import { readCache, writeCache } from '../../cache/userCache';
 import { recentFoods, rememberFoods } from '../../food/cache';
+import { expoNotificationApi } from '../../notifications/expoApi';
+import { REMINDER_ID } from '../../notifications/adapter';
 
+jest.mock('../../notifications/expoApi', () => ({ expoNotificationApi: { cancel: jest.fn().mockResolvedValue(undefined) } }));
 jest.mock('../../checkin/photos', () => ({ removeLocalPhotos: jest.fn() }));
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -285,6 +288,43 @@ describe('authService', () => {
       await signOut();
 
       expect(await listPending('u1')).toHaveLength(1);
+    });
+  });
+
+  describe('personal reminders', () => {
+    beforeEach(() => (expoNotificationApi.cancel as jest.Mock).mockClear());
+
+    it('are cancelled on sign-out, so the next person on this phone gets none', async () => {
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await signOut();
+
+      expect(expoNotificationApi.cancel).toHaveBeenCalledWith(REMINDER_ID);
+    });
+
+    it('stay scheduled when sign-out itself fails, because the person is still signed in', async () => {
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: { message: 'Network error' } });
+
+      await expect(signOut()).rejects.toThrow();
+
+      expect(expoNotificationApi.cancel).not.toHaveBeenCalled();
+    });
+
+    it('are cancelled when the account is deleted', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({ error: null });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await deleteAccount();
+
+      expect(expoNotificationApi.cancel).toHaveBeenCalledWith(REMINDER_ID);
+    });
+
+    it('never block signing out when the device refuses to cancel', async () => {
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+      (expoNotificationApi.cancel as jest.Mock).mockRejectedValueOnce(new Error('no'));
+
+      await expect(signOut()).resolves.toBeUndefined();
     });
   });
 });

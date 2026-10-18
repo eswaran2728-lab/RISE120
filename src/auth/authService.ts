@@ -1,4 +1,6 @@
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
+import { cancelReminders } from '../notifications/adapter';
+import { expoNotificationApi } from '../notifications/expoApi';
 import { supabase } from '../lib/supabase';
 import { clearDraft } from '../onboarding/draft';
 import { clearPending } from '../sync/queue';
@@ -49,6 +51,16 @@ export async function signInWithGoogle(): Promise<void> {
   }
 }
 
+// A reminder belongs to the person who set it. Cancelling is best effort: a device that refuses must never stop
+// someone signing out or deleting their account.
+async function dropReminders(): Promise<void> {
+  try {
+    await cancelReminders(expoNotificationApi);
+  } catch {
+    // Nothing to do; the next sign-in reschedules from that account's own preferences.
+  }
+}
+
 export async function signOut(): Promise<void> {
   const { error } = await supabase.auth.signOut();
   if (error) {
@@ -56,6 +68,7 @@ export async function signOut(): Promise<void> {
   }
   // A draft belongs to the person who started it; never carry it to the next account.
   await clearDraft();
+  await dropReminders();
 }
 
 export async function deleteAccount(): Promise<void> {
@@ -78,4 +91,5 @@ export async function deleteAccount(): Promise<void> {
   }
   // The auth user is gone server-side, so only clear the local session.
   await supabase.auth.signOut({ scope: 'local' });
+  await dropReminders();
 }
