@@ -47,10 +47,10 @@ export function LimitNotice({ title, body, detail, actions, onAction, busy = fal
   );
 }
 
-const MUTED = '#8892A0';
+const MUTED = tokens.color.textSecondary;
 
 const styles = StyleSheet.create({
-  box: { backgroundColor: tokens.color.surface, borderRadius: 8, padding: tokens.space[4], marginTop: tokens.space[3], borderWidth: 1, borderColor: '#2D3748' },
+  box: { backgroundColor: tokens.color.surface, borderRadius: 8, padding: tokens.space[4], marginTop: tokens.space[3], borderWidth: 1, borderColor: tokens.color.border },
   title: { color: tokens.color.text, fontSize: 18, fontWeight: '600', marginBottom: tokens.space[1] },
   body: { color: tokens.color.text, fontSize: 15, lineHeight: 21 },
   detail: { color: MUTED, fontSize: 13, lineHeight: 18, marginTop: tokens.space[2] },

@@ -22,6 +22,7 @@ export const tokens = {
     danger: '#FF8A80',
     success: '#7FDBA0',
     disabled: '#6B7580',
+    scrim: 'rgba(16, 20, 25, 0.8)', // text over the camera view
   },
   space: [0, 4, 8, 12, 16, 24, 32, 48],
   minTap: 48,

@@ -75,7 +75,7 @@ export default function PlanInputsScreen() {
   );
 }
 
-const MUTED = '#8892A0';
+const MUTED = tokens.color.textSecondary;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },
@@ -91,12 +91,12 @@ const styles = StyleSheet.create({
     marginBottom: tokens.space[3],
     backgroundColor: tokens.color.surface,
     borderWidth: 1,
-    borderColor: '#2D3748',
+    borderColor: tokens.color.borderStrong,
   },
   optionSelected: { borderColor: tokens.color.accent },
   optionText: { color: tokens.color.text, fontSize: 16 },
   optionTextSelected: { color: tokens.color.accent, fontWeight: '600' },
-  errorText: { color: '#FF6B6B', marginVertical: tokens.space[2] },
+  errorText: { color: tokens.color.danger, marginVertical: tokens.space[2] },
   button: {
     minHeight: tokens.minTap,
     borderRadius: 8,

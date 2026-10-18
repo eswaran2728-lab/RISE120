@@ -172,8 +172,8 @@ export default function FoodEditScreen() {
   );
 }
 
-const MUTED = '#8892A0';
-const DANGER = '#FF6B6B';
+const MUTED = tokens.color.textSecondary;
+const DANGER = tokens.color.danger;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },

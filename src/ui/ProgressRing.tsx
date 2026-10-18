@@ -24,7 +24,7 @@ export function ProgressRing({ progress, size = 120, strokeWidth = 12, label }: 
       accessibilityValue={{ min: 0, max: 100, now: percent }}
     >
       <Svg width={size} height={size}>
-        <Circle cx={size / 2} cy={size / 2} r={radius} stroke="#2D3748" strokeWidth={strokeWidth} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={radius} stroke={tokens.color.border} strokeWidth={strokeWidth} fill="none" />
         <Circle
           cx={size / 2}
           cy={size / 2}

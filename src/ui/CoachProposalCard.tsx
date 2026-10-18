@@ -85,8 +85,8 @@ export function CoachProposalCard({ proposal, plan, deciding, decisionError, ref
   );
 }
 
-const MUTED = '#8892A0';
-const WARNING = '#FFB454';
+const MUTED = tokens.color.textSecondary;
+const WARNING = tokens.color.warning;
 
 const styles = StyleSheet.create({
   card: { marginTop: tokens.space[2], padding: tokens.space[3], borderRadius: 8, borderWidth: 1, borderColor: tokens.color.accent },

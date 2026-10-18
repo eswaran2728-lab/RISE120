@@ -48,7 +48,7 @@ export default function SignInScreen() {
       <TextInput
         style={styles.input}
         placeholder={t('auth.email')}
-        placeholderTextColor="#8892A0"
+        placeholderTextColor={tokens.color.textSecondary}
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -58,7 +58,7 @@ export default function SignInScreen() {
       <TextInput
         style={styles.input}
         placeholder={t('auth.password')}
-        placeholderTextColor="#8892A0"
+        placeholderTextColor={tokens.color.textSecondary}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -70,7 +70,7 @@ export default function SignInScreen() {
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#101318" />
+          <ActivityIndicator color={tokens.color.onAccent} />
         ) : (
           <Text style={styles.primaryButtonText}>{t('auth.signIn')}</Text>
         )}
@@ -109,13 +109,13 @@ const styles = StyleSheet.create({
     marginBottom: tokens.space[2],
   },
   subtitle: {
-    color: '#8892A0',
+    color: tokens.color.textSecondary,
     fontSize: 18,
     textAlign: 'center',
     marginBottom: tokens.space[5],
   },
   errorText: {
-    color: '#FF6B6B',
+    color: tokens.color.danger,
     textAlign: 'center',
     marginBottom: tokens.space[3],
   },
@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   secondaryButton: {
     backgroundColor: tokens.color.surface,
     borderWidth: 1,
-    borderColor: '#2D3748',
+    borderColor: tokens.color.borderStrong,
   },
   secondaryButtonText: {
     color: tokens.color.text,

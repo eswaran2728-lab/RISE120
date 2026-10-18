@@ -81,8 +81,8 @@ export function FoodEntry({ food, initialQuantity = '1', initialMeal, submitLabe
   );
 }
 
-const MUTED = '#8892A0';
-const DANGER = '#FF6B6B';
+const MUTED = tokens.color.textSecondary;
+const DANGER = tokens.color.danger;
 
 const styles = StyleSheet.create({
   container: { backgroundColor: tokens.color.surface, borderRadius: 8, padding: tokens.space[4] },
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   total: { color: tokens.color.accent, fontSize: 14, marginTop: tokens.space[2] },
   errorText: { color: DANGER, marginTop: tokens.space[2] },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: tokens.space[2] },
-  chip: { minHeight: tokens.minTap, paddingHorizontal: tokens.space[3], borderRadius: 8, justifyContent: 'center', borderWidth: 1, borderColor: '#2D3748' },
+  chip: { minHeight: tokens.minTap, paddingHorizontal: tokens.space[3], borderRadius: 8, justifyContent: 'center', borderWidth: 1, borderColor: tokens.color.borderStrong },
   chipSelected: { borderColor: tokens.color.accent },
   chipText: { color: tokens.color.text },
   chipTextSelected: { color: tokens.color.accent, fontWeight: '600' },

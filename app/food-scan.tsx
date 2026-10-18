@@ -132,7 +132,7 @@ export default function FoodScanScreen() {
   );
 }
 
-const MUTED = '#8892A0';
+const MUTED = tokens.color.textSecondary;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },
@@ -140,7 +140,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, backgroundColor: tokens.color.bg, alignItems: 'center', justifyContent: 'center', padding: tokens.space[5], gap: tokens.space[3] },
   title: { color: tokens.color.text, fontSize: 24, fontWeight: '700', textAlign: 'center' },
   message: { color: tokens.color.text, fontSize: 16, textAlign: 'center', lineHeight: 22, marginBottom: tokens.space[3] },
-  overlay: { position: 'absolute', bottom: tokens.space[7], left: tokens.space[5], right: tokens.space[5], alignItems: 'center', backgroundColor: 'rgba(16,19,24,0.8)', borderRadius: 8, padding: tokens.space[4], gap: tokens.space[2] },
+  overlay: { position: 'absolute', bottom: tokens.space[7], left: tokens.space[5], right: tokens.space[5], alignItems: 'center', backgroundColor: tokens.color.scrim, borderRadius: 8, padding: tokens.space[4], gap: tokens.space[2] },
   overlayText: { color: tokens.color.text, fontSize: 16, textAlign: 'center' },
   card: { backgroundColor: tokens.color.surface, borderRadius: 8, padding: tokens.space[4], marginBottom: tokens.space[3] },
   name: { color: tokens.color.text, fontSize: 20, fontWeight: '700' },

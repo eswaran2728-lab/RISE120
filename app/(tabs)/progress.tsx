@@ -13,11 +13,12 @@ import { loadProgress } from '../../src/progress/load';
 import { deriveProgress, ProgressState } from '../../src/progress/selectors';
 import { planPhase } from '../../src/today/selectors';
 import { WeightChart } from '../../src/ui/WeightChart';
+import { withAccountKey } from '../../src/auth/withAccountKey';
 
 const COLUMNS = 10;
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-export default function ProgressScreen() {
+function ProgressScreen() {
   useLanguage();
   const { session } = useSession();
   const { width } = useWindowDimensions();
@@ -160,7 +161,7 @@ export default function ProgressScreen() {
   );
 }
 
-const MUTED = '#8892A0';
+const MUTED = tokens.color.textSecondary;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },
@@ -180,8 +181,10 @@ const styles = StyleSheet.create({
   cell: { borderRadius: 4, backgroundColor: tokens.color.surface, alignItems: 'center', justifyContent: 'center' },
   cellComplete: { backgroundColor: tokens.color.accent },
   cellPartial: { backgroundColor: tokens.color.surface, borderWidth: 2, borderColor: tokens.color.accent },
-  cellMissed: { backgroundColor: '#2D3748' },
+  cellMissed: { backgroundColor: tokens.color.surfaceRaised },
   cellToday: { borderWidth: 2, borderColor: tokens.color.text },
   pendingDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: tokens.color.bg, borderWidth: 1, borderColor: tokens.color.text },
-  historyRow: { paddingVertical: tokens.space[2], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2D3748' },
+  historyRow: { paddingVertical: tokens.space[2], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: tokens.color.border },
 });
+
+export default withAccountKey(ProgressScreen);

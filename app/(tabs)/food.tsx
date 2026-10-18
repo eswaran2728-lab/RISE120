@@ -19,10 +19,11 @@ import { FoodEntry } from '../../src/ui/FoodEntry';
 import { LimitNotice } from '../../src/ui/LimitNotice';
 import { useUnlock } from '../../src/monetization/useUnlock';
 import { formatReset, LimitSnapshot, loadLimitsOrCached, unlockActions } from '../../src/monetization/limits';
+import { withAccountKey } from '../../src/auth/withAccountKey';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-export default function FoodScreen() {
+function FoodScreen() {
   useLanguage();
   const router = useRouter();
   const { session } = useSession();
@@ -267,8 +268,8 @@ export default function FoodScreen() {
   );
 }
 
-const MUTED = '#8892A0';
-const DANGER = '#FF6B6B';
+const MUTED = tokens.color.textSecondary;
+const DANGER = tokens.color.danger;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },
@@ -286,7 +287,7 @@ const styles = StyleSheet.create({
   disclaimer: { color: MUTED, fontSize: 12, marginTop: tokens.space[3], lineHeight: 17 },
   warning: { color: DANGER, fontSize: 12, marginTop: tokens.space[2] },
   mealHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  entry: { minHeight: tokens.minTap, justifyContent: 'center', paddingVertical: tokens.space[2], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2D3748' },
+  entry: { minHeight: tokens.minTap, justifyContent: 'center', paddingVertical: tokens.space[2], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: tokens.color.border },
   entryName: { color: tokens.color.text, fontSize: 16 },
   addButton: { minHeight: tokens.minTap, justifyContent: 'center' },
   addText: { color: tokens.color.accent, fontSize: 16, fontWeight: '600' },
@@ -295,3 +296,5 @@ const styles = StyleSheet.create({
   link: { minHeight: tokens.minTap, alignItems: 'center', justifyContent: 'center' },
   linkText: { color: tokens.color.accent, fontSize: 16 },
 });
+
+export default withAccountKey(FoodScreen);

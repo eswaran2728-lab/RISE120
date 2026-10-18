@@ -52,5 +52,5 @@ export function WeightChart({ points, width, height = 160, formatWeight, label }
 
 const styles = StyleSheet.create({
   axis: { flexDirection: 'row', justifyContent: 'space-between', marginTop: tokens.space[1] },
-  axisText: { color: '#8892A0', fontSize: 12 },
+  axisText: { color: tokens.color.textSecondary, fontSize: 12 },
 });

@@ -75,7 +75,7 @@ export default function PlanPreviewScreen() {
   );
 }
 
-const MUTED = '#8892A0';
+const MUTED = tokens.color.textSecondary;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },

@@ -153,7 +153,7 @@ export default function CheckinScreen() {
   );
 }
 
-const MUTED = '#8892A0';
+const MUTED = tokens.color.textSecondary;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },
@@ -163,13 +163,13 @@ const styles = StyleSheet.create({
   label: { color: MUTED, fontSize: 14, marginTop: tokens.space[3], marginBottom: tokens.space[2] },
   input: { backgroundColor: tokens.color.surface, color: tokens.color.text, borderRadius: 8, paddingHorizontal: tokens.space[4], minHeight: tokens.minTap, fontSize: 16 },
   row: { flexDirection: 'row', gap: tokens.space[2] },
-  moodChip: { flex: 1, minHeight: tokens.minTap, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: '#2D3748' },
+  moodChip: { flex: 1, minHeight: tokens.minTap, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: tokens.color.borderStrong },
   moodChipSelected: { borderColor: tokens.color.accent },
   moodText: { color: tokens.color.text, fontSize: 18 },
   moodTextSelected: { color: tokens.color.accent, fontWeight: '700' },
   hint: { color: MUTED, fontSize: 13, marginTop: tokens.space[2], lineHeight: 18 },
-  errorText: { color: '#FF6B6B', marginTop: tokens.space[2] },
-  secondaryButton: { minHeight: tokens.minTap, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: tokens.space[5], backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: '#2D3748' },
+  errorText: { color: tokens.color.danger, marginTop: tokens.space[2] },
+  secondaryButton: { minHeight: tokens.minTap, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: tokens.space[5], backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: tokens.color.borderStrong },
   secondaryText: { color: tokens.color.text, fontSize: 16 },
   preview: { width: '100%', height: 200, borderRadius: 8, marginTop: tokens.space[3] },
   button: { minHeight: tokens.minTap, borderRadius: 8, alignItems: 'center', justifyContent: 'center', marginTop: tokens.space[5], backgroundColor: tokens.color.accent },

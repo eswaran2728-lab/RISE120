@@ -152,7 +152,7 @@ export default function CoachScreen() {
           value={view.draft}
           onChangeText={coach.setDraft}
           placeholder={t('coach.placeholder')}
-          placeholderTextColor="#8892A0"
+          placeholderTextColor={tokens.color.textSecondary}
           multiline
           maxLength={COACH_MESSAGE_MAX_CHARS}
           editable={!sending}
@@ -165,8 +165,8 @@ export default function CoachScreen() {
   );
 }
 
-const MUTED = '#8892A0';
-const WARNING = '#FFB454';
+const MUTED = tokens.color.textSecondary;
+const WARNING = tokens.color.warning;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },

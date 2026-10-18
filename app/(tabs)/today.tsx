@@ -18,10 +18,11 @@ import { loadSessionSets } from '../../src/workout/session';
 import { LimitNotice } from '../../src/ui/LimitNotice';
 import { useUnlock } from '../../src/monetization/useUnlock';
 import { LimitSnapshot, loadLimitsOrCached, lockedPlanDay, unlockActions } from '../../src/monetization/limits';
+import { withAccountKey } from '../../src/auth/withAccountKey';
 
 type Status = 'loading' | 'creating' | 'error' | 'ready';
 
-export default function TodayScreen() {
+function TodayScreen() {
   useLanguage();
   const router = useRouter();
   const { session } = useSession();
@@ -277,3 +278,5 @@ const styles = StyleSheet.create({
   linkButton: { minHeight: tokens.minTap, justifyContent: 'center' },
   linkText: { color: tokens.color.accent, fontSize: 16, lineHeight: 24 },
 });
+
+export default withAccountKey(TodayScreen);

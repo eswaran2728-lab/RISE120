@@ -26,11 +26,12 @@ import {
   SessionSet,
   summarizeSession,
 } from '../../src/workout/log';
+import { withAccountKey } from '../../src/auth/withAccountKey';
 
 const REST_OPTIONS = [60, 90, 120];
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
-export default function WorkoutScreen() {
+function WorkoutScreen() {
   useLanguage();
   const { session } = useSession();
   const userId = session?.user?.id;
@@ -264,7 +265,7 @@ export default function WorkoutScreen() {
   );
 }
 
-const MUTED = '#8892A0';
+const MUTED = tokens.color.textSecondary;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },
@@ -275,7 +276,7 @@ const styles = StyleSheet.create({
   restBox: { backgroundColor: tokens.color.surface, borderRadius: 8, padding: tokens.space[4], marginBottom: tokens.space[4], alignItems: 'center' },
   restLabel: { color: MUTED, fontSize: 14 },
   restClock: { color: tokens.color.accent, fontSize: 40, fontWeight: '700' },
-  card: { backgroundColor: tokens.color.surface, borderRadius: 8, padding: tokens.space[4], marginBottom: tokens.space[3], borderWidth: 1, borderColor: '#2D3748' },
+  card: { backgroundColor: tokens.color.surface, borderRadius: 8, padding: tokens.space[4], marginBottom: tokens.space[3], borderWidth: 1, borderColor: tokens.color.border },
   cardOpen: { borderColor: tokens.color.accent },
   exerciseName: { color: tokens.color.text, fontSize: 18, fontWeight: '600' },
   meta: { color: MUTED, fontSize: 14, marginTop: tokens.space[1], lineHeight: 20 },
@@ -283,9 +284,9 @@ const styles = StyleSheet.create({
   form: { marginTop: tokens.space[3] },
   label: { color: MUTED, fontSize: 14, marginBottom: tokens.space[1], marginTop: tokens.space[2] },
   input: { backgroundColor: tokens.color.bg, color: tokens.color.text, borderRadius: 8, paddingHorizontal: tokens.space[4], minHeight: tokens.minTap, fontSize: 16 },
-  errorText: { color: '#FF6B6B', marginTop: tokens.space[2] },
+  errorText: { color: tokens.color.danger, marginTop: tokens.space[2] },
   row: { flexDirection: 'row', gap: tokens.space[2], marginTop: tokens.space[3] },
-  chip: { minHeight: tokens.minTap, paddingHorizontal: tokens.space[4], borderRadius: 8, justifyContent: 'center', borderWidth: 1, borderColor: '#2D3748' },
+  chip: { minHeight: tokens.minTap, paddingHorizontal: tokens.space[4], borderRadius: 8, justifyContent: 'center', borderWidth: 1, borderColor: tokens.color.borderStrong },
   chipSelected: { borderColor: tokens.color.accent },
   chipText: { color: tokens.color.text },
   chipTextSelected: { color: tokens.color.accent, fontWeight: '600' },
@@ -295,3 +296,5 @@ const styles = StyleSheet.create({
   linkText: { color: tokens.color.accent, fontSize: 16 },
   summary: { marginTop: tokens.space[4], padding: tokens.space[4], borderRadius: 8, backgroundColor: tokens.color.surface },
 });
+
+export default withAccountKey(WorkoutScreen);

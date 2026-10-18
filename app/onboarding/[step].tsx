@@ -325,7 +325,7 @@ export default function OnboardingStep() {
   );
 }
 
-const MUTED = '#8892A0';
+const MUTED = tokens.color.textSecondary;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
     minHeight: tokens.minTap,
     fontSize: 16,
   },
-  errorText: { color: '#FF6B6B', marginTop: tokens.space[1], marginBottom: tokens.space[2] },
+  errorText: { color: tokens.color.danger, marginTop: tokens.space[1], marginBottom: tokens.space[2] },
   option: {
     minHeight: tokens.minTap,
     borderRadius: 8,
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     marginBottom: tokens.space[3],
     backgroundColor: tokens.color.surface,
     borderWidth: 1,
-    borderColor: '#2D3748',
+    borderColor: tokens.color.borderStrong,
     flexShrink: 1,
   },
   optionSelected: { borderColor: tokens.color.accent },
@@ -363,7 +363,7 @@ const styles = StyleSheet.create({
   button: { flex: 1, minHeight: tokens.minTap, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
   primaryButton: { backgroundColor: tokens.color.accent },
   primaryButtonText: { color: tokens.color.bg, fontWeight: '600', fontSize: 16 },
-  secondaryButton: { backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: '#2D3748' },
+  secondaryButton: { backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: tokens.color.borderStrong },
   secondaryButtonText: { color: tokens.color.text, fontSize: 16 },
   disabled: { opacity: 0.5 },
   signOut: { minHeight: tokens.minTap, alignItems: 'center', justifyContent: 'center', marginTop: tokens.space[4] },

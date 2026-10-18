@@ -245,8 +245,8 @@ export default function FoodSearchScreen() {
   );
 }
 
-const MUTED = '#8892A0';
-const DANGER = '#FF6B6B';
+const MUTED = tokens.color.textSecondary;
+const DANGER = tokens.color.danger;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },
@@ -254,8 +254,8 @@ const styles = StyleSheet.create({
   input: { backgroundColor: tokens.color.surface, color: tokens.color.text, borderRadius: 8, paddingHorizontal: tokens.space[4], minHeight: tokens.minTap, fontSize: 16 },
   heading: { color: tokens.color.text, fontSize: 18, fontWeight: '600', marginTop: tokens.space[4], marginBottom: tokens.space[1] },
   section: { marginTop: tokens.space[3] },
-  row: { minHeight: tokens.minTap, justifyContent: 'center', paddingVertical: tokens.space[2], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2D3748' },
-  rowWrap: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: '#2D3748' },
+  row: { minHeight: tokens.minTap, justifyContent: 'center', paddingVertical: tokens.space[2], borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: tokens.color.border },
+  rowWrap: { flexDirection: 'row', alignItems: 'center', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: tokens.color.border },
   rowMain: { flex: 1, minHeight: tokens.minTap, justifyContent: 'center', paddingVertical: tokens.space[2] },
   editButton: { minHeight: tokens.minTap, minWidth: tokens.minTap, alignItems: 'center', justifyContent: 'center', paddingHorizontal: tokens.space[2] },
   name: { color: tokens.color.text, fontSize: 16 },
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   warning: { color: MUTED, fontSize: 13, marginTop: tokens.space[3] },
   errorText: { color: DANGER, marginTop: tokens.space[2] },
   spinner: { marginVertical: tokens.space[3] },
-  secondaryButton: { minHeight: tokens.minTap, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2D3748' },
+  secondaryButton: { minHeight: tokens.minTap, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: tokens.color.borderStrong },
   secondaryText: { color: tokens.color.text, fontSize: 16 },
   link: { minHeight: tokens.minTap, justifyContent: 'center' },
   linkText: { color: tokens.color.accent, fontSize: 16 },

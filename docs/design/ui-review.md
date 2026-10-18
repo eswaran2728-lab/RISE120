@@ -16,7 +16,7 @@ Status at 18 October 2026. This file records what has been checked and what has 
 | Today: real journey-day arc, one gold session card with one action, separate small steps | Done | Jest interaction tests; not seen on a phone |
 | Five-tab bar restyled (same order, line icons, 48-point items) | Done | Jest tests; not seen on a phone |
 | Shared accessible components (roadmap A2): ActionButton, SectionCard, AsyncState, SyncNotice, ScreenFrame | Done; no screen uses them yet | Jest component tests; not seen on a phone |
-| Workout, Food, Coach, Progress, Settings restyle (roadmap A3) | Not started | |
+| Theme applied to every screen (roadmap A3): no colour literals left in app/ or src/; private tabs restart per account | Done for colour and account isolation; the new screen hierarchy (suggested prompts, meal planner, buddy, session choice) arrives with those features | Jest tests; not seen on a phone |
 
 ## Checks the owner still has to do (not done by the implementer)
 

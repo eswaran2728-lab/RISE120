@@ -141,8 +141,8 @@ export default function SettingsScreen() {
   );
 }
 
-const MUTED = '#8892A0';
-const DANGER = '#FF6B6B';
+const MUTED = tokens.color.textSecondary;
+const DANGER = tokens.color.danger;
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: tokens.color.bg },
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     marginBottom: tokens.space[3],
     backgroundColor: tokens.color.surface,
     borderWidth: 1,
-    borderColor: '#2D3748',
+    borderColor: tokens.color.borderStrong,
   },
   optionSelected: { borderColor: tokens.color.accent },
   optionText: { color: tokens.color.text, fontSize: 16 },
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: tokens.space[4],
   },
-  secondaryButton: { backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: '#2D3748' },
+  secondaryButton: { backgroundColor: tokens.color.surface, borderWidth: 1, borderColor: tokens.color.borderStrong },
   secondaryButtonText: { color: tokens.color.text, fontSize: 16 },
   dangerButton: { borderWidth: 1, borderColor: DANGER },
   dangerText: { color: DANGER, fontSize: 16, fontWeight: '600' },
