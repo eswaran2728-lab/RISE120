@@ -51,7 +51,8 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "lint": "expo lint",
-    "eval:coach": "node scripts/run-ts.cjs scripts/evaluate-coach.ts"
+    "eval:coach": "node scripts/run-ts.cjs scripts/evaluate-coach.ts",
+    "content:check": "node scripts/run-ts.cjs scripts/validate-training-content.ts"
   },
   "private": true,
   "jest": {
