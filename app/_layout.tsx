@@ -4,6 +4,7 @@ import { DarkTheme, Stack, ThemeProvider, useRouter, useSegments } from 'expo-ro
 import i18next, { t } from '../src/i18n';
 import { signOut } from '../src/auth/authService';
 import { useSync } from '../src/sync/useSync';
+import { useReminderSync } from '../src/notifications/useReminderSync';
 import { getPurchaseService, setActiveUser } from '../src/monetization/services';
 import { tokens } from '../src/theme/tokens';
 import { useSession } from '../src/auth/useSession';
@@ -76,6 +77,7 @@ export default function RootLayout() {
 
   const userId = session?.user?.id;
   useSync(userId);
+  useReminderSync(userId ?? null);
   // Keep the store customer and the ad flow on the signed-in account; sign-out and account switch follow.
   useEffect(() => {
     setActiveUser(userId ?? null);

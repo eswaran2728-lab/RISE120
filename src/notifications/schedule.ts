@@ -39,17 +39,21 @@ function instantFor(date: string, minutes: number, zone: string): Date {
   return exact[0] ?? (candidates[0].getTime() > candidates[1].getTime() ? candidates[0] : candidates[1]);
 }
 
-export function nextReminder(prefs: ReminderPreferences, completedToday: boolean, now: Date, timeZone: string): Date | null {
-  if (!prefs.enabled || prefs.pausedCategories.includes(prefs.category)) return null;
+// The next `count` reminders, one per local day, in order. A day is skipped only when it is today and today's
+// workout is complete. Every instant is computed from the wall clock in `timeZone`, so daylight-saving changes
+// keep the chosen local time. Empty when reminders are off, paused or the preferences are malformed.
+export function reminderDates(prefs: ReminderPreferences, completedToday: boolean, now: Date, timeZone: string, count: number): Date[] {
+  if (!prefs.enabled || prefs.pausedCategories.includes(prefs.category)) return [];
   const at = minutesOf(prefs.time);
-  if (at === null) return null;
+  if (at === null) return [];
   const hasQuiet = prefs.quietStart !== null || prefs.quietEnd !== null;
   const qs = minutesOf(prefs.quietStart);
   const qe = minutesOf(prefs.quietEnd);
-  if (hasQuiet && (qs === null || qe === null)) return null;
+  if (hasQuiet && (qs === null || qe === null)) return [];
 
   const today = dateInZone(now, timeZone);
-  for (let k = completedToday ? 1 : 0; k < 4; k++) {
+  const out: Date[] = [];
+  for (let k = 0; k < count + 3 && out.length < count; k++) {
     let date = addLocalDays(today, k);
     let minutes = at;
     if (hasQuiet && qs !== null && qe !== null && qs !== qe) {
@@ -62,7 +66,14 @@ export function nextReminder(prefs: ReminderPreferences, completedToday: boolean
       }
     }
     const instant = instantFor(date, minutes, timeZone);
-    if (instant.getTime() > now.getTime()) return instant;
+    if (instant.getTime() <= now.getTime()) continue;
+    if (completedToday && dateInZone(instant, timeZone) === today) continue;
+    if (out.some((d) => d.getTime() === instant.getTime())) continue;
+    out.push(instant);
   }
-  return null;
+  return out;
+}
+
+export function nextReminder(prefs: ReminderPreferences, completedToday: boolean, now: Date, timeZone: string): Date | null {
+  return reminderDates(prefs, completedToday, now, timeZone, 1)[0] ?? null;
 }

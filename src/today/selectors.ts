@@ -68,3 +68,10 @@ export function checkinStreak(checkinDates: LocalDate[], localDate: LocalDate): 
   }
   return streak;
 }
+
+// A workout day is complete only when every planned set is logged. One set is not the workout; extra sets of one
+// exercise do not stand in for another; a rest day has no workout to finish.
+export function isWorkoutComplete(day: PlanDay, loggedSets: { exerciseId: string }[]): boolean {
+  const state = deriveToday(day, loggedSets, false);
+  return state.kind === 'workout' && state.plannedSets > 0 && state.completedSets >= state.plannedSets;
+}

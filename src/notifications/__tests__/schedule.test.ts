@@ -1,4 +1,4 @@
-import { nextReminder, type ReminderPreferences } from '../schedule';
+import { nextReminder, reminderDates, type ReminderPreferences } from '../schedule';
 
 const KL = 'Asia/Kuala_Lumpur'; // UTC+8, no daylight saving
 const prefs = (over: Partial<ReminderPreferences> = {}): ReminderPreferences => ({
@@ -73,3 +73,60 @@ describe('nextReminder', () => {
     expect(nextReminder(prefs({ quietStart: 'x', quietEnd: '07:00' }), false, at('2026-10-18T01:00:00Z'), KL)).toBeNull();
   });
 });
+
+describe('reminderDates', () => {
+  it('lists one reminder per local day for the horizon, starting with the next one', () => {
+    const dates = reminderDates(prefs(), false, at('2026-10-18T01:00:00Z'), KL, 14);
+
+    expect(dates).toHaveLength(14);
+    expect(dates[0]).toEqual(at('2026-10-18T10:00:00Z'));
+    expect(dates[13]).toEqual(at('2026-10-31T10:00:00Z'));
+    dates.slice(1).forEach((d, i) => expect(d.getTime() - dates[i].getTime()).toBe(24 * 3600 * 1000));
+  });
+
+  it('leaves out only todays reminder when todays workout is complete', () => {
+    const dates = reminderDates(prefs(), true, at('2026-10-18T01:00:00Z'), KL, 3);
+
+    expect(dates).toEqual([at('2026-10-19T10:00:00Z'), at('2026-10-20T10:00:00Z'), at('2026-10-21T10:00:00Z')]);
+  });
+
+  it('starts tomorrow when todays time has passed', () => {
+    expect(reminderDates(prefs(), false, at('2026-10-18T11:00:00Z'), KL, 2)).toEqual([at('2026-10-19T10:00:00Z'), at('2026-10-20T10:00:00Z')]);
+  });
+
+  it('moves to the next local day at local midnight, not at UTC midnight', () => {
+    // 23:59 in Kuala Lumpur on the 18th; a 00:30 reminder is 31 minutes away
+    const p = prefs({ time: '00:30' });
+    expect(reminderDates(p, false, at('2026-10-18T15:59:00Z'), KL, 2)).toEqual([at('2026-10-18T16:30:00Z'), at('2026-10-19T16:30:00Z')]);
+    // 00:31 local: tonights 00:30 has gone, so the next is a day later
+    expect(reminderDates(p, false, at('2026-10-18T16:31:00Z'), KL, 1)).toEqual([at('2026-10-19T16:30:00Z')]);
+  });
+
+  it('keeps 08:00 local across the daylight-saving change, so the UTC time shifts by an hour', () => {
+    const p = prefs({ time: '08:00' });
+    const dates = reminderDates(p, false, at('2026-03-07T20:00:00Z'), 'America/New_York', 3);
+
+    expect(dates).toEqual([at('2026-03-08T12:00:00Z'), at('2026-03-09T12:00:00Z'), at('2026-03-10T12:00:00Z')]);
+    // the day before the change is still on standard time
+    expect(reminderDates(p, false, at('2026-03-07T05:00:00Z'), 'America/New_York', 2)).toEqual([at('2026-03-07T13:00:00Z'), at('2026-03-08T12:00:00Z')]);
+  });
+
+  it('applies quiet hours to every day, giving one reminder a day', () => {
+    const p = prefs({ time: '23:30', quietStart: '22:00', quietEnd: '07:00' });
+    const dates = reminderDates(p, false, at('2026-10-18T01:00:00Z'), KL, 3);
+
+    expect(dates).toEqual([at('2026-10-18T23:00:00Z'), at('2026-10-19T23:00:00Z'), at('2026-10-20T23:00:00Z')]);
+  });
+
+  it('gives nothing when off, paused or malformed', () => {
+    expect(reminderDates(prefs({ enabled: false }), false, at('2026-10-18T01:00:00Z'), KL, 14)).toEqual([]);
+    expect(reminderDates(prefs({ pausedCategories: ['workout'] }), false, at('2026-10-18T01:00:00Z'), KL, 14)).toEqual([]);
+    expect(reminderDates(prefs({ time: '99:99' }), false, at('2026-10-18T01:00:00Z'), KL, 14)).toEqual([]);
+  });
+
+  it('never returns a time that has already passed', () => {
+    const now = at('2026-10-18T10:00:00Z'); // exactly 18:00 local
+    reminderDates(prefs(), false, now, KL, 5).forEach((d) => expect(d.getTime()).toBeGreaterThan(now.getTime()));
+  });
+});
+

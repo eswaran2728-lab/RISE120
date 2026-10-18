@@ -7,9 +7,14 @@ import { removeLocalPhotos } from '../../checkin/photos';
 import { readCache, writeCache } from '../../cache/userCache';
 import { recentFoods, rememberFoods } from '../../food/cache';
 import { expoNotificationApi } from '../../notifications/expoApi';
-import { REMINDER_ID } from '../../notifications/adapter';
 
-jest.mock('../../notifications/expoApi', () => ({ expoNotificationApi: { cancel: jest.fn().mockResolvedValue(undefined) } }));
+
+jest.mock('../../notifications/expoApi', () => ({
+  expoNotificationApi: {
+    cancel: jest.fn().mockResolvedValue(undefined),
+    scheduledIds: jest.fn().mockResolvedValue(['rise120-reminder-2026-10-19T10:00:00.000Z', 'rise120-reminder-2026-10-20T10:00:00.000Z', 'other-feature']),
+  },
+}));
 jest.mock('../../checkin/photos', () => ({ removeLocalPhotos: jest.fn() }));
 
 jest.mock('@react-native-async-storage/async-storage', () =>
@@ -293,13 +298,18 @@ describe('authService', () => {
 
   describe('personal reminders', () => {
     beforeEach(() => (expoNotificationApi.cancel as jest.Mock).mockClear());
+    const expectEveryReminderCancelled = () => {
+      expect(expoNotificationApi.cancel).toHaveBeenCalledWith('rise120-reminder-2026-10-19T10:00:00.000Z');
+      expect(expoNotificationApi.cancel).toHaveBeenCalledWith('rise120-reminder-2026-10-20T10:00:00.000Z');
+      expect(expoNotificationApi.cancel).not.toHaveBeenCalledWith('other-feature');
+    };
 
-    it('are cancelled on sign-out, so the next person on this phone gets none', async () => {
+    it('are all cancelled on sign-out (every day in the window, nothing else), so the next person on this phone gets none', async () => {
       (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
 
       await signOut();
 
-      expect(expoNotificationApi.cancel).toHaveBeenCalledWith(REMINDER_ID);
+      expectEveryReminderCancelled();
     });
 
     it('stay scheduled when sign-out itself fails, because the person is still signed in', async () => {
@@ -317,7 +327,7 @@ describe('authService', () => {
 
       await deleteAccount();
 
-      expect(expoNotificationApi.cancel).toHaveBeenCalledWith(REMINDER_ID);
+      expectEveryReminderCancelled();
     });
 
     it('never block signing out when the device refuses to cancel', async () => {

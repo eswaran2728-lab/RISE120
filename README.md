@@ -237,6 +237,28 @@ Run after the Gemini secrets are set on development and a fresh development buil
 - Open the Coach tab in airplane mode: the saved history shows with an offline notice.
 - Sign out and in as another account while a reply is loading: nothing from the first account appears for the second. Delete the account: history is gone and a new sign-up starts empty.
 
+## Daily workout reminder (code complete; not run on a phone)
+
+Off by default. The person turns it on in Settings (the permission prompt appears only then), picks a time and may
+switch on quiet hours (9 pm to 7 am). The text is generic and says nothing about the body or progress.
+
+- **Schedule:** one dated local notification per day for the next 14 days (`REMINDER_HORIZON_DAYS`), built by
+  `src/notifications/schedule.ts` from the wall clock in the device's current time zone, so daylight-saving changes
+  keep the chosen local time. A repeating trigger was not used: it cannot skip a finished day or honour quiet hours.
+- **Horizon:** if the app is not opened for more than 14 days, reminders stop after the last scheduled day. Every run
+  rebuilds the window, so any launch restores it.
+- **Resync:** on launch, on every return to the foreground, when settings change, when the account changes, and
+  after a set is logged (`src/notifications/useReminderSync.ts`). Each resync cancels this app's reminders and
+  schedules the window again under one lock, so repeats and overlapping calls never leave duplicates.
+- **Completion:** today's reminder is dropped only when every planned set for today is logged (`isWorkoutComplete`),
+  read from the cached plan and the stored sets including sets still waiting to sync. One set is not the workout.
+  A rest day is not "complete", so a reminder is still scheduled on it.
+- **Accounts:** sign-out, account deletion and switching accounts cancel the previous account's reminders.
+- **Known limits:** if the person travels to another time zone and does not open the app, scheduled reminders keep
+  the old zone's clock times until the next launch. Unreadable data counts as "not complete".
+- **Not verified on a phone:** delivery with the app closed, after a reboot, with permission revoked, in battery
+  saver, and across a real time-zone or daylight-saving change.
+
 ## Edge functions
 
 Functions called by the app verify the caller's JWT inside the function (user id comes from the token only, never the body), so all functions are deployed with `--no-verify-jwt`. `revenuecat-webhook` and `grant-ad-reward` are called by RevenueCat and Google, which cannot send a Supabase JWT; they trust only their header secret or Google's signature:

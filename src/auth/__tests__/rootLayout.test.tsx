@@ -5,6 +5,7 @@ import i18next from '../../i18n';
 import { supabase } from '../../lib/supabase';
 import { signOut } from '../authService';
 import { useSync } from '../../sync/useSync';
+import { useReminderSync } from '../../notifications/useReminderSync';
 import { notifyOnboardingComplete, notifyPlanInputsSaved } from '../../onboarding/completion';
 import { mockStore } from '../../sync/testing/storageMock';
 
@@ -30,6 +31,7 @@ jest.mock('@react-native-async-storage/async-storage', () => ({
   default: jest.requireActual('../../sync/testing/storageMock').asyncStorageMock,
 }));
 jest.mock('../../sync/useSync', () => ({ useSync: jest.fn() }));
+jest.mock('../../notifications/useReminderSync', () => ({ useReminderSync: jest.fn() }));
 jest.mock('../authService', () => ({ signOut: jest.fn().mockResolvedValue(undefined) }));
 
 jest.mock('../../lib/supabase', () => ({
@@ -186,6 +188,18 @@ describe('RootLayout profile lookup', () => {
     await renderLayout();
 
     expect(useSync).toHaveBeenCalledWith('u1');
+  });
+
+  it('keeps the reminders in step with the signed-in account, and with none when signed out', async () => {
+    mockProfileLookup({ data: { ...COMPLETE_PROFILE }, error: null });
+    await renderLayout();
+    expect(useReminderSync).toHaveBeenCalledWith('u1');
+
+    (useReminderSync as jest.Mock).mockClear();
+    mockSession = null;
+    await renderLayout();
+    expect(useReminderSync).toHaveBeenCalledWith(null);
+    mockSession = { user: { id: 'u1' } };
   });
 
   it.each(['plan-preview', 'checkin', 'food-edit', 'food-search', 'food-scan'])('leaves an onboarded user on the %s screen', async (segment) => {

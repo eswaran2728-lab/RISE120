@@ -4,8 +4,12 @@ import { t } from '../i18n';
 import { tokens } from '../theme/tokens';
 import { ActionButton } from '../ui/ActionButton';
 import { SectionCard } from '../ui/SectionCard';
-import { cancelReminders, enableReminders, syncReminders, type NotificationApi } from './adapter';
+import { dateInZone } from '../journey/dates';
+import type { LocalDate } from '../sync/types';
+import { cancelReminders, enableReminders, type NotificationApi } from './adapter';
+import { workoutCompleteToday } from './completion';
 import { DEFAULT_REMINDERS, loadReminders, saveReminders } from './preferences';
+import { resyncReminders } from './resync';
 import type { ReminderPreferences } from './schedule';
 
 // A few ready times instead of a clock picker: quick to choose, easy to read, and always valid.
@@ -17,12 +21,13 @@ interface Props {
   api: NotificationApi;
   now?: () => Date;
   timeZone?: string;
+  isWorkoutComplete?: (userId: string, date: LocalDate) => Promise<boolean>;
 }
 
 const deviceZone = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 // Daily workout reminder. Off until the person turns it on; permission is asked for at that moment only.
-export function ReminderSettings({ userId, api, now = () => new Date(), timeZone = deviceZone() }: Props) {
+export function ReminderSettings({ userId, api, now = () => new Date(), timeZone = deviceZone(), isWorkoutComplete = workoutCompleteToday }: Props) {
   const [prefs, setPrefs] = useState<ReminderPreferences>(DEFAULT_REMINDERS);
   const [denied, setDenied] = useState(false);
   const alive = useRef(true);
@@ -40,11 +45,10 @@ export function ReminderSettings({ userId, api, now = () => new Date(), timeZone
     async (next: ReminderPreferences) => {
       if (!(await saveReminders(userId, next))) return;
       if (alive.current) setPrefs(next);
-      // Whether today's session is done is not known here; the next sync (app open, workout logged) corrects it.
-      await syncReminders(api, next, false, now(), timeZone, text);
+      await resyncReminders(userId, { api, now, timeZone, text, isWorkoutComplete });
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userId, api, timeZone, text.title, text.body]
+    [userId, api, timeZone, text.title, text.body, isWorkoutComplete]
   );
 
   const setEnabled = async (enabled: boolean) => {
@@ -56,7 +60,8 @@ export function ReminderSettings({ userId, api, now = () => new Date(), timeZone
       return;
     }
     const next = { ...prefs, enabled: true };
-    const result = await enableReminders(api, next, false, now(), timeZone, text);
+    const completed = await isWorkoutComplete(userId, dateInZone(now(), timeZone)).catch(() => false);
+    const result = await enableReminders(api, next, completed, now(), timeZone, text);
     if (!alive.current) return;
     if (result === 'scheduled') {
       await saveReminders(userId, next);

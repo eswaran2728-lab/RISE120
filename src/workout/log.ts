@@ -1,5 +1,6 @@
 import { enqueue } from '../sync/queue';
 import type { LocalDate } from '../sync/types';
+import { notifyWorkoutSetLogged } from './events';
 import { kgFromLb, parseDecimal } from '../onboarding/units';
 
 const MAX_REPS = 100;
@@ -78,6 +79,7 @@ export async function queueWorkoutSet(userId: string, day: LocalDate, set: Worko
     weightKg: parsed.weightKg,
     updatedAt: Date.now(),
   });
+  notifyWorkoutSetLogged(userId);
   return id;
 }
 

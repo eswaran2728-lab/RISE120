@@ -1,5 +1,6 @@
 import { mockStore } from '../../sync/testing/storageMock';
 import { listPending } from '../../sync/queue';
+import { onWorkoutSetLogged } from '../events';
 import {
   formatClock,
   mergeSets,
@@ -79,6 +80,27 @@ describe('queueWorkoutSet', () => {
     expect(await listPending('u1')).toEqual([
       expect.objectContaining({ kind: 'workout_set', id, date: '2026-10-13', exerciseId: 'ex-1', setNumber: 1, reps: 10, weightKg: 20 }),
     ]);
+  });
+
+  it('tells listeners which account logged a set, only after the set is queued', async () => {
+    const heard: string[] = [];
+    const stop = onWorkoutSetLogged(async (userId) => void heard.push(`${userId}:${(await listPending(userId)).length}`));
+
+    await queueWorkoutSet('u1', '2026-10-13', input);
+    stop();
+    await queueWorkoutSet('u1', '2026-10-13', { ...input, setNumber: 2 });
+
+    expect(heard).toEqual(['u1:1']);
+  });
+
+  it('does not announce a set that was refused', async () => {
+    const heard = jest.fn();
+    const stop = onWorkoutSetLogged(heard);
+
+    await expect(queueWorkoutSet('u1', '2026-10-13', { ...input, reps: 'abc' })).rejects.toThrow();
+    stop();
+
+    expect(heard).not.toHaveBeenCalled();
   });
 
   it('creates one pending set after a double tap', async () => {

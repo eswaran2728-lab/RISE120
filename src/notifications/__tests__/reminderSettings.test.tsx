@@ -1,11 +1,12 @@
 import React from 'react';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import { ReminderSettings } from '../ReminderSettings';
-import { REMINDER_ID, type NotificationApi, type PermissionState } from '../adapter';
+import { REMINDER_HORIZON_DAYS, type NotificationApi, type PermissionState } from '../adapter';
 import { loadReminders } from '../preferences';
 import { mockStore } from '../../sync/testing/storageMock';
 import { t } from '../../i18n';
 
+jest.mock('../completion', () => ({ workoutCompleteToday: jest.fn(async () => false) }));
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
   default: jest.requireActual('../../sync/testing/storageMock').asyncStorageMock,
@@ -25,10 +26,12 @@ function fakeApi(start: PermissionState = 'granted') {
     }),
     schedule: jest.fn(async (id, at, title, body) => void scheduled.set(id, { at, title, body })),
     cancel: jest.fn(async (id) => void scheduled.delete(id)),
+    scheduledIds: jest.fn(async () => [...scheduled.keys()]),
   };
   return Object.assign(api, { grantOnAsk: () => (api.requestPermission = jest.fn(async () => (current = 'granted'))) });
 }
 
+const earliest = (api: { scheduled: Map<string, { at: Date }> }) => [...api.scheduled.values()].map((v) => v.at).sort((a, b) => a.getTime() - b.getTime())[0];
 const byId = (tree: ReactTestRenderer, id: string) => tree.root.findAll((n) => n.props.testID === id && typeof n.type !== 'string' && (typeof n.props.onPress === 'function' || typeof n.props.onValueChange === 'function')).pop();
 const textsOf = (tree: ReactTestRenderer): string[] => {
   const out: string[] = [];
@@ -41,10 +44,11 @@ const textsOf = (tree: ReactTestRenderer): string[] => {
 };
 const shows = (tree: ReactTestRenderer, text: string) => textsOf(tree).some((s) => s.includes(text));
 
+let complete = jest.fn(async () => false);
 async function mount(api: NotificationApi, userId = 'A') {
   let tree!: ReactTestRenderer;
   await act(async () => {
-    tree = create(<ReminderSettings userId={userId} api={api} now={() => NOW} timeZone="Asia/Kuala_Lumpur" />);
+    tree = create(<ReminderSettings userId={userId} api={api} now={() => NOW} timeZone="Asia/Kuala_Lumpur" isWorkoutComplete={complete} />);
   });
   return tree;
 }
@@ -57,7 +61,10 @@ const press = (tree: ReactTestRenderer, id: string) =>
     await byId(tree, id)!.props.onPress();
   });
 
-beforeEach(() => mockStore.clear());
+beforeEach(() => {
+  mockStore.clear();
+  complete = jest.fn(async () => false);
+});
 
 describe('reminder settings', () => {
   it('starts switched off and schedules nothing', async () => {
@@ -78,8 +85,9 @@ describe('reminder settings', () => {
 
     expect(byId(tree, 'reminder-enabled')!.props.value).toBe(true);
     expect((await loadReminders('A')).enabled).toBe(true);
-    expect([...api.scheduled.keys()]).toEqual([REMINDER_ID]);
-    expect(api.scheduled.get(REMINDER_ID)).toMatchObject({ title: t('reminders.title'), body: t('reminders.body'), at: new Date('2026-10-18T10:00:00Z') });
+    expect(api.scheduled.size).toBe(REMINDER_HORIZON_DAYS);
+    const first = [...api.scheduled.values()].sort((a, b) => a.at.getTime() - b.at.getTime())[0];
+    expect(first).toMatchObject({ title: t('reminders.title'), body: t('reminders.body'), at: new Date('2026-10-18T10:00:00Z') });
   });
 
   it('stays off and says why when the person refuses permission', async () => {
@@ -102,8 +110,8 @@ describe('reminder settings', () => {
     await press(tree, 'reminder-time-0630');
 
     expect((await loadReminders('A')).time).toBe('06:30');
-    expect(api.scheduled.get(REMINDER_ID)!.at).toEqual(new Date('2026-10-18T22:30:00Z')); // 06:30 tomorrow, the time having passed
-    expect(api.scheduled.size).toBe(1);
+    expect(earliest(api)).toEqual(new Date('2026-10-18T22:30:00Z')); // 06:30 tomorrow, the time having passed
+    expect(api.scheduled.size).toBe(REMINDER_HORIZON_DAYS);
   });
 
   it('keeps reminders out of quiet hours when they are switched on', async () => {
@@ -116,7 +124,7 @@ describe('reminder settings', () => {
 
     const saved = await loadReminders('A');
     expect([saved.quietStart, saved.quietEnd]).toEqual(['21:00', '07:00']);
-    expect(api.scheduled.get(REMINDER_ID)!.at).toEqual(new Date('2026-10-18T23:00:00Z')); // 07:00 next morning
+    expect(earliest(api)).toEqual(new Date('2026-10-18T23:00:00Z')); // 07:00 next morning
   });
 
   it('turning off cancels the scheduled reminder', async () => {
@@ -139,5 +147,15 @@ describe('reminder settings', () => {
     const again = await mount(fakeApi());
 
     expect(byId(again, 'reminder-enabled')!.props.value).toBe(true);
+  });
+
+  it('leaves out the reminder for today when the workout for today is already complete', async () => {
+    complete.mockResolvedValue(true);
+    const api = fakeApi();
+    const tree = await mount(api);
+
+    await toggle(tree, 'reminder-enabled', true);
+
+    expect(earliest(api)).toEqual(new Date('2026-10-19T10:00:00Z'));
   });
 });
