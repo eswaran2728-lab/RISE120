@@ -9,10 +9,12 @@ import type { ProgressInput } from '../selectors';
 
 jest.setTimeout(30000);
 
+const mockPush = jest.fn();
+
 jest.mock('expo-router', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const React = require('react');
-  return { useFocusEffect: (callback: () => void | (() => void)) => React.useEffect(callback, [callback]) };
+  return { useFocusEffect: (callback: () => void | (() => void)) => React.useEffect(callback, [callback]), useRouter: () => ({ push: mockPush }) };
 });
 jest.mock('@react-native-async-storage/async-storage', () => jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock'));
 jest.mock('../../auth/useSession', () => ({ useSession: () => ({ session: { user: { id: 'A' } } }) }));
@@ -109,6 +111,18 @@ describe('the last-7-days card on Progress', () => {
     // The wording of the card itself (the calendar legend further down has its own words).
     const cardWords = ['title', 'noLogs', 'onlyLogged', 'noPrevious', 'nothingToCompare'].map((key) => t(`progress.week.${key}`)).join(' ');
     expect(cardWords).not.toMatch(/missed|failed|behind|lazy|skipped/i);
+  });
+});
+
+describe('the buddy circle link', () => {
+  it('opens the buddy screen from Progress', async () => {
+    const tree = await mount();
+
+    await act(async () => {
+      byId(tree, 'progress-open-buddy')!.props.onPress();
+    });
+
+    expect(mockPush).toHaveBeenCalledWith('/buddy');
   });
 });
 

@@ -84,11 +84,23 @@ export async function listGroups(): Promise<BuddyGroup[] | null> {
   if (groups.error || !groups.data) return null;
   const members = await supabase.from('buddy_members').select('member_id, group_id, display_name, role, joined_at').order('joined_at');
   if (members.error || !members.data) return null;
-  return (groups.data as { id: string; name: string }[]).map((g) => ({
-    id: g.id,
-    name: g.name,
-    members: (members.data as { member_id: string; group_id: string; display_name: string; role: BuddyMember['role'] }[])
-      .filter((m) => m.group_id === g.id)
-      .map((m) => ({ memberId: m.member_id, displayName: m.display_name, role: m.role })),
-  }));
+  // Which listed member is the caller: only their own member id and role are returned, never anyone else's.
+  const mine = await supabase.rpc('buddy_my_memberships');
+  if (mine.error || !mine.data) return null;
+  const own = new Map((mine.data as { group_id: string; member_id: string; role: BuddyMember['role'] }[]).map((m) => [m.group_id, m]));
+
+  return (groups.data as { id: string; name: string }[]).flatMap((g) => {
+    const me = own.get(g.id);
+    if (!me) return [];
+    return [
+      {
+        id: g.id,
+        name: g.name,
+        me: { memberId: me.member_id, role: me.role },
+        members: (members.data as { member_id: string; group_id: string; display_name: string; role: BuddyMember['role'] }[])
+          .filter((m) => m.group_id === g.id)
+          .map((m) => ({ memberId: m.member_id, displayName: m.display_name, role: m.role })),
+      },
+    ];
+  });
 }

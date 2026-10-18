@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { Href, useFocusEffect, useRouter } from 'expo-router';
 import { t } from '../../src/i18n';
 import { useLanguage } from '../../src/i18n/useLanguage';
 import { tokens } from '../../src/theme/tokens';
@@ -26,6 +26,7 @@ const round1 = (n: number) => Math.round(n * 10) / 10;
 
 function ProgressScreen() {
   useLanguage();
+  const router = useRouter();
   const { session } = useSession();
   const { width } = useWindowDimensions();
   const userId = session?.user?.id;
@@ -137,6 +138,7 @@ function ProgressScreen() {
         </View>
       ) : null}
 
+      <ActionButton testID="progress-open-buddy" variant="link" label={t('buddy.open')} onPress={() => router.push('/buddy' as Href)} />
       <ActionButton testID="progress-hide-body" variant="link" label={t(hideBody ? 'progress.showBody' : 'progress.hideBody')} onPress={toggleBody} />
 
       {hideBody ? null : <Text style={styles.heading}>{t('progress.weight')}</Text>}

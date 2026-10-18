@@ -1,4 +1,4 @@
-import { callFunction, createAdmin, createTestUser, TestUser } from './helpers';
+import { callFunction, createAdmin, createTestClient, createTestUser, publishableKey, TestUser } from './helpers';
 
 jest.setTimeout(300000);
 
@@ -358,6 +358,28 @@ describe('buddy groups (live)', () => {
       const attempt = await A.client.rpc('buddy_create_group', { p_user_id: A.id, p_name: 'x', p_display_name: 'y', p_disclosure_version: 1 });
 
       expect(attempt.error).not.toBeNull();
+    });
+  });
+
+  describe('knowing which member is you', () => {
+    it('tells each member only their own member id and role in each group', async () => {
+      const groupId = await createGroup(A);
+      await join(A, groupId, B, 'Sam');
+      const memberIdOf = async (name: string) => (await A.client.from('buddy_members').select('member_id, display_name').eq('group_id', groupId)).data!.find((m) => m.display_name === name)!.member_id;
+
+      const mineA = await A.client.rpc('buddy_my_memberships');
+      const mineB = await B.client.rpc('buddy_my_memberships');
+      const mineC = await C.client.rpc('buddy_my_memberships');
+
+      expect(mineA.data).toEqual([{ group_id: groupId, member_id: await memberIdOf('Alex'), role: 'owner' }]);
+      expect(mineB.data).toEqual([{ group_id: groupId, member_id: await memberIdOf('Sam'), role: 'member' }]);
+      expect(mineC.data).toEqual([]);
+    });
+
+    it('is not available without signing in', async () => {
+      const anonymous = createTestClient(publishableKey);
+
+      expect((await anonymous.rpc('buddy_my_memberships')).error).not.toBeNull();
     });
   });
 

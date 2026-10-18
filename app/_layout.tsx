@@ -12,7 +12,7 @@ import { onOnboardingComplete, onPlanInputsSaved } from '../src/onboarding/compl
 import { cacheUnits, loadProfileCache, ProfileCache, saveProfileCache, updateProfileCache } from '../src/profile/cache';
 
 // Screens an onboarded user may be on; anywhere else (auth, onboarding) goes to Today.
-const SIGNED_IN_SEGMENTS = ['(tabs)', 'settings', 'plan-preview', 'checkin', 'food-edit', 'food-search', 'food-scan', 'paywall', 'cycle-review'];
+const SIGNED_IN_SEGMENTS = ['(tabs)', 'settings', 'plan-preview', 'checkin', 'food-edit', 'food-search', 'food-scan', 'paywall', 'cycle-review', 'buddy'];
 
 export default function RootLayout() {
   const { session, loading } = useSession();

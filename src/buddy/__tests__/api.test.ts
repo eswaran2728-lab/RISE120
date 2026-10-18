@@ -1,7 +1,7 @@
 import { acceptInvite, blockMember, createGroup, createInvite, groupSummary, leaveGroup, listGroups, removeMember, revokeInvite, DISCLOSURE_VERSION } from '../api';
 import { supabase } from '../../lib/supabase';
 
-jest.mock('../../lib/supabase', () => ({ supabase: { functions: { invoke: jest.fn() }, from: jest.fn() } }));
+jest.mock('../../lib/supabase', () => ({ supabase: { functions: { invoke: jest.fn() }, from: jest.fn(), rpc: jest.fn() } }));
 
 const invoke = supabase.functions.invoke as jest.Mock;
 const GROUP = '3f2b8c1e-1111-4222-8333-444455556666';
@@ -94,15 +94,25 @@ describe('listGroups', () => {
     const members = [{ member_id: MEMBER, group_id: GROUP, display_name: 'Sam', role: 'member', joined_at: '2026-10-02T00:00:00Z' }];
     const select = jest.fn((columns: string) => ({ order: async () => ({ data: columns.startsWith('id') ? groups : members, error: null }) }));
     (supabase.from as jest.Mock).mockReturnValue({ select });
+    (supabase.rpc as jest.Mock).mockResolvedValue({ data: [{ group_id: GROUP, member_id: MEMBER, role: 'member' }], error: null });
 
     const result = await listGroups();
 
     expect(select.mock.calls.map((c) => c[0])).toEqual(['id, name, created_at', 'member_id, group_id, display_name, role, joined_at']);
-    expect(result).toEqual([{ id: GROUP, name: 'Crew', members: [{ memberId: MEMBER, displayName: 'Sam', role: 'member' }] }]);
+    expect(supabase.rpc).toHaveBeenCalledWith('buddy_my_memberships');
+    expect(result).toEqual([{ id: GROUP, name: 'Crew', me: { memberId: MEMBER, role: 'member' }, members: [{ memberId: MEMBER, displayName: 'Sam', role: 'member' }] }]);
   });
 
   it('answers null, not an empty list, when the groups cannot be read', async () => {
     (supabase.from as jest.Mock).mockReturnValue({ select: () => ({ order: async () => ({ data: null, error: { message: 'offline' } }) }) });
+
+    expect(await listGroups()).toBeNull();
+  });
+
+  it('answers null when the own roles cannot be read, so the app never guesses who is the owner', async () => {
+    const select = jest.fn(() => ({ order: async () => ({ data: [], error: null }) }));
+    (supabase.from as jest.Mock).mockReturnValue({ select });
+    (supabase.rpc as jest.Mock).mockResolvedValue({ data: null, error: { message: 'offline' } });
 
     expect(await listGroups()).toBeNull();
   });

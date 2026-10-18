@@ -9,6 +9,7 @@ export interface BuddyMember {
 export interface BuddyGroup {
   id: string;
   name: string;
+  me: { memberId: string; role: 'owner' | 'member' };
   members: BuddyMember[];
 }
 
