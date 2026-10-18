@@ -23,7 +23,7 @@ function tableMock(checkins: unknown) {
       : { select: () => ({ eq: async () => checkins }) };
 }
 
-function mockTables(logs: { data: { id: string; log_date: string }[] | null; error: unknown }, checkins: unknown) {
+function mockTables(logs: { data: Record<string, unknown>[] | null; error: unknown }, checkins: unknown) {
   logPages.mockImplementation(async (from: number, to: number) =>
     logs.error ? { data: null, error: logs.error } : { data: (logs.data ?? []).slice(from, to + 1), error: null }
   );
@@ -62,6 +62,16 @@ describe('loadProgress', () => {
       checkins: [{ date: '2026-10-13', weightKg: 70.5, mood: 4, sleepHours: 7.5, photoPath: 'u1/2026-10-13.jpg' }],
     });
     expect(result?.pending).toHaveLength(1);
+  });
+
+  it('carries the exercise, reps and weight of each set, and the exercise names, for the weekly summary', async () => {
+    (loadPlanBundle as jest.Mock).mockResolvedValue({ ...bundle, exercises: [{ id: 'e1', name: 'Goblet squat', muscleGroup: 'squat', equipment: 'home', instructions: '' }] });
+    mockTables({ data: [{ id: 's1', log_date: '2026-10-13', exercise_id: 'e1', reps: 10, weight_kg: '22.5' }], error: null }, { data: [], error: null });
+
+    const result = await loadProgress('u1', '2026-10-15');
+
+    expect(result?.workoutLogs).toEqual([{ id: 's1', date: '2026-10-13', exerciseId: 'e1', reps: 10, weightKg: 22.5 }]);
+    expect(result?.exerciseNames).toEqual({ e1: 'Goblet squat' });
   });
 
   it('still returns the plan and pending entries when the server rows cannot be read', async () => {

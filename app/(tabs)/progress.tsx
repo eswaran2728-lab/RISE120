@@ -13,6 +13,12 @@ import { loadProgress } from '../../src/progress/load';
 import { deriveProgress, ProgressState } from '../../src/progress/selectors';
 import { planPhase } from '../../src/today/selectors';
 import { WeightChart } from '../../src/ui/WeightChart';
+import { ActionButton } from '../../src/ui/ActionButton';
+import { SectionCard } from '../../src/ui/SectionCard';
+import { loadHideBody, saveHideBody } from '../../src/progress/preferences';
+import { summaryInputFrom } from '../../src/progress/summaryData';
+import { summariseWeek } from '../../src/progress/weeklySummary';
+import type { ProgressInput } from '../../src/progress/selectors';
 import { withAccountKey } from '../../src/auth/withAccountKey';
 
 const COLUMNS = 10;
@@ -26,6 +32,8 @@ function ProgressScreen() {
   const today = useLocalDate();
   const [loading, setLoading] = useState(true);
   const [progress, setProgress] = useState<ProgressState | null>(null);
+  const [source, setSource] = useState<ProgressInput | null>(null);
+  const [hideBody, setHideBody] = useState(false);
   const [planComplete, setPlanComplete] = useState(false);
   const [units, setUnits] = useState<'metric' | 'imperial'>('metric');
   const [urls, setUrls] = useState<Record<string, string | null>>({});
@@ -38,8 +46,11 @@ function ProgressScreen() {
         try {
           const input = await loadProgress(userId, today);
           const knownUnits = await loadUnits(userId);
+          const hidden = await loadHideBody(userId);
           if (!alive) return;
           setUnits(knownUnits);
+          setHideBody(hidden);
+          setSource(input);
           setProgress(input ? deriveProgress(input) : null);
           setPlanComplete(input ? planPhase(input.plan, today) === 'complete' : false);
         } catch {
@@ -70,6 +81,14 @@ function ProgressScreen() {
 
   const formatWeight = (kg: number) => (units === 'imperial' ? `${round1(lbFromKg(kg))} lb` : `${kg} kg`);
   const contentWidth = width - 2 * tokens.space[5];
+  const toggleBody = async () => {
+    if (!userId) return;
+    const next = !hideBody;
+    setHideBody(next);
+    await saveHideBody(userId, next);
+  };
+  const week = source ? summariseWeek(summaryInputFrom(source, !hideBody)) : null;
+  const nameOf = (id: string) => source?.exerciseNames?.[id] ?? id;
   const cell = Math.floor((contentWidth - (COLUMNS - 1) * 4) / COLUMNS);
 
   if (loading) {
@@ -93,15 +112,42 @@ function ProgressScreen() {
       <Text style={styles.title}>{t('progress.title')}</Text>
       {planComplete ? <Text style={styles.completeBanner}>{t('today.planComplete')}</Text> : null}
 
-      <Text style={styles.heading}>{t('progress.weight')}</Text>
-      {progress.weightPoints.length === 0 ? (
+      {week ? (
+        <View style={styles.weekCard}>
+          <SectionCard title={t('progress.week.title')}>
+            <Text style={styles.listItem}>{t('progress.week.workoutDays', { count: week.participation.workoutDays })}</Text>
+            <Text style={styles.listItem}>{t('progress.week.checkinDays', { count: week.participation.checkinDays })}</Text>
+            {week.body && week.body.changeKg !== null ? <Text style={styles.listItem}>{t('progress.week.weightChange', { value: `${week.body.changeKg > 0 ? '+' : ''}${formatWeight(week.body.changeKg)}` })}</Text> : null}
+            {week.strength.length > 0 ? (
+              <View style={styles.strength}>
+                <Text style={styles.meta}>{t('progress.week.strengthTitle')}</Text>
+                {week.strength.map((item) => (
+                  <Text key={item.exerciseId} style={styles.listItem}>{`${nameOf(item.exerciseId)}: ${t(`progress.week.${item.change}`)}`}</Text>
+                ))}
+              </View>
+            ) : null}
+            <View accessibilityLiveRegion="polite">
+              {week.coverage.notes.includes('no_logs') ? <Text style={styles.meta}>{t('progress.week.noLogs')}</Text> : null}
+              {week.coverage.notes.includes('no_previous_week') ? <Text style={styles.meta}>{t('progress.week.noPrevious')}</Text> : null}
+              {week.coverage.notes.includes('nothing_to_compare') ? <Text style={styles.meta}>{t('progress.week.nothingToCompare')}</Text> : null}
+              {week.coverage.notes.includes('pending_sync') ? <Text style={styles.meta}>{t('progress.week.pendingSync', { count: week.coverage.pendingSync })}</Text> : null}
+              <Text style={styles.meta}>{t('progress.week.onlyLogged')}</Text>
+            </View>
+          </SectionCard>
+        </View>
+      ) : null}
+
+      <ActionButton testID="progress-hide-body" variant="link" label={t(hideBody ? 'progress.showBody' : 'progress.hideBody')} onPress={toggleBody} />
+
+      {hideBody ? null : <Text style={styles.heading}>{t('progress.weight')}</Text>}
+      {hideBody ? null : progress.weightPoints.length === 0 ? (
         <Text style={styles.meta}>{t('progress.noWeights')}</Text>
       ) : (
         <WeightChart points={progress.weightPoints} width={contentWidth} formatWeight={formatWeight} label={t('progress.chartLabel')} />
       )}
 
-      <Text style={styles.heading}>{t('progress.photos')}</Text>
-      {progress.photos.length === 0 ? (
+      {hideBody ? null : <Text style={styles.heading}>{t('progress.photos')}</Text>}
+      {hideBody ? null : progress.photos.length === 0 ? (
         <Text style={styles.meta}>{t('progress.noPhotos')}</Text>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -147,7 +193,7 @@ function ProgressScreen() {
           <Text style={styles.listItem}>{entry.date}</Text>
           <Text style={styles.meta}>
             {[
-              entry.weightKg !== null ? formatWeight(entry.weightKg) : null,
+              !hideBody && entry.weightKg !== null ? formatWeight(entry.weightKg) : null,
               entry.mood !== null ? `${t('progress.mood')} ${entry.mood}/5` : null,
               entry.sleepHours !== null ? `${t('progress.sleep')} ${entry.sleepHours}${t('progress.hoursShort')}` : null,
             ]
@@ -170,6 +216,8 @@ const styles = StyleSheet.create({
   message: { color: tokens.color.text, fontSize: 18, textAlign: 'center' },
   title: { color: tokens.color.text, fontSize: 28, fontWeight: '700' },
   completeBanner: { color: tokens.color.accent, fontSize: 16, fontWeight: '600', marginTop: tokens.space[2] },
+  weekCard: { marginTop: tokens.space[4] },
+  strength: { marginTop: tokens.space[2] },
   heading: { color: tokens.color.text, fontSize: 18, fontWeight: '600', marginTop: tokens.space[5], marginBottom: tokens.space[2] },
   meta: { color: MUTED, fontSize: 13, lineHeight: 18, marginTop: tokens.space[1] },
   listItem: { color: tokens.color.text, fontSize: 16 },

@@ -17,7 +17,8 @@ export interface ProgressInput {
   plan: Plan;
   days: PlanDay[];
   today: LocalDate; // the device's local calendar date
-  workoutLogs: { id: string; date: LocalDate }[];
+  workoutLogs: { id: string; date: LocalDate; exerciseId?: string; reps?: number; weightKg?: number | null }[];
+  exerciseNames?: Record<string, string>;
   checkins: ServerCheckin[];
   pending: PendingOperation[];
 }

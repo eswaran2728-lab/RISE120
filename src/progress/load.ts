@@ -14,14 +14,14 @@ async function loadAllWorkoutLogs(userId: string): Promise<ProgressInput['workou
   for (let from = 0; ; from += PAGE_SIZE) {
     const { data, error } = await supabase
       .from('workout_logs')
-      .select('id, log_date')
+      .select('id, log_date, exercise_id, reps, weight_kg')
       .eq('user_id', userId)
       .order('log_date')
       .order('id')
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw new Error(error.message);
     const page = data ?? [];
-    for (const row of page) logs.push({ id: row.id, date: row.log_date });
+    for (const row of page) logs.push({ id: row.id, date: row.log_date, exerciseId: row.exercise_id, reps: row.reps, weightKg: row.weight_kg === null || row.weight_kg === undefined ? null : Number(row.weight_kg) });
     if (page.length < PAGE_SIZE) return logs;
   }
 }
@@ -61,5 +61,6 @@ export async function loadProgress(userId: string, today: LocalDate): Promise<Pr
     workoutLogs,
     checkins,
     pending: await listPending(userId),
+    exerciseNames: Object.fromEntries(bundle.exercises.map((e) => [e.id, e.name])),
   };
 }
