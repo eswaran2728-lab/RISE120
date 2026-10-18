@@ -52,6 +52,8 @@ Deno.serve(async (req) => {
   if (rpcError) return json({ error: 'request_failed' }, 500);
   if (outcome === 'premium') return json({ error: 'premium_no_ads' }, 409);
   if (outcome === 'cap_reached') return json({ error: 'ad_cap_reached' }, 429);
+  // Food-log rewards are retired once manual food is unlimited; AI rewards continue.
+  if (outcome === 'unavailable') return json({ error: 'reward_unavailable' }, 409);
 
   return json({ token, expiresAt: new Date(Date.now() + TOKEN_TTL_SECONDS * 1000).toISOString() }, 200);
 });

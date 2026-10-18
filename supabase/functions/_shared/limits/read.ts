@@ -23,6 +23,17 @@ export interface LimitSnapshot {
   food: Allowance;
   ai: Allowance;
   adRewards: { used: number; max: number; remaining: number };
+  // What this account may use right now. The server decides; the app only displays it.
+  capabilities: Capabilities;
+}
+
+export interface Capabilities {
+  basicPlan: boolean;
+  manualFood: boolean;
+  adaptiveProgression: boolean;
+  mealPlanner: boolean;
+  photoFood: boolean;
+  coach: boolean;
 }
 
 export const quotaDayUtc = (now: Date): string => now.toISOString().slice(0, 10);
@@ -48,18 +59,29 @@ export function buildLimitSnapshot(input: SnapshotInput): LimitSnapshot {
   const premium = tier === 'premium';
   const allowance = (used: number, base: number, credits: number): Allowance =>
     premium ? { used, base: null, bonus: 0, remaining: null } : { used, base, bonus: credits, remaining: Math.max(0, base + credits - used) };
+  const food: Allowance = config.manualFoodUnlimited && !premium ? { used: input.foodUsed, base: null, bonus: input.foodCredits, remaining: null } : allowance(input.foodUsed, config.freeFoodLogsPerDay, input.foodCredits);
+  const ai = allowance(input.aiUsed, config.freeAiMessagesPerDay, input.aiCredits);
+  const planDaysAccessible = premium ? PLAN_LENGTH : Math.min(config.freePlanDays, PLAN_LENGTH);
 
   return {
     tier,
     quotaDayUtc: quotaDayUtc(input.now),
     resetsAt: nextResetUtc(input.now),
-    planDaysAccessible: premium ? PLAN_LENGTH : Math.min(config.freePlanDays, PLAN_LENGTH),
-    food: allowance(input.foodUsed, config.freeFoodLogsPerDay, input.foodCredits),
-    ai: allowance(input.aiUsed, config.freeAiMessagesPerDay, input.aiCredits),
+    planDaysAccessible,
+    food,
+    ai,
     // Premium sees no ads and no ad rewards.
     adRewards: premium
       ? { used: 0, max: 0, remaining: 0 }
       : { used: input.adsUsed, max: config.adRewardsMaxPerDay, remaining: Math.max(0, config.adRewardsMaxPerDay - input.adsUsed) },
+    capabilities: {
+      basicPlan: planDaysAccessible > 0,
+      manualFood: food.remaining === null || food.remaining > 0,
+      adaptiveProgression: premium,
+      mealPlanner: premium,
+      photoFood: premium,
+      coach: ai.remaining === null || ai.remaining > 0,
+    },
   };
 }
 

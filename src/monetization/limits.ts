@@ -22,6 +22,45 @@ export interface LimitSnapshot {
   food: Allowance;
   ai: Allowance;
   adRewards: { used: number; max: number; remaining: number };
+  // Absent in answers from an older server and in older remembered snapshots; use capabilitiesOf().
+  capabilities?: Capabilities;
+}
+
+export interface Capabilities {
+  basicPlan: boolean;
+  manualFood: boolean;
+  adaptiveProgression: boolean;
+  mealPlanner: boolean;
+  photoFood: boolean;
+  coach: boolean;
+}
+
+const CAPABILITY_KEYS: (keyof Capabilities)[] = ['basicPlan', 'manualFood', 'adaptiveProgression', 'mealPlanner', 'photoFood', 'coach'];
+
+function parseCapabilities(value: unknown): Capabilities | null {
+  if (!isRecord(value)) return null;
+  const out = {} as Capabilities;
+  for (const key of CAPABILITY_KEYS) {
+    if (typeof value[key] !== 'boolean') return null;
+    out[key] = value[key] as boolean;
+  }
+  return out;
+}
+
+// What the account may use. The server's answer when it sent one; otherwise a restrictive reading of the
+// allowances. With no snapshot nothing is assumed: the server still decides what is accepted.
+export function capabilitiesOf(snapshot: LimitSnapshot | null): Capabilities {
+  if (!snapshot) return { basicPlan: false, manualFood: false, adaptiveProgression: false, mealPlanner: false, photoFood: false, coach: false };
+  if (snapshot.capabilities) return snapshot.capabilities;
+  const premium = snapshot.tier === 'premium';
+  return {
+    basicPlan: snapshot.planDaysAccessible > 0,
+    manualFood: snapshot.food.remaining === null || snapshot.food.remaining > 0,
+    adaptiveProgression: premium,
+    mealPlanner: premium,
+    photoFood: premium,
+    coach: snapshot.ai.remaining === null || snapshot.ai.remaining > 0,
+  };
 }
 
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
@@ -46,7 +85,13 @@ export function parseLimitSnapshot(value: unknown): LimitSnapshot | null {
   const ai = parseAllowance(value.ai);
   if (!food || !ai || !isRecord(adRewards)) return null;
   if (!isNumber(adRewards.used) || !isNumber(adRewards.max) || !isNumber(adRewards.remaining)) return null;
-  return { tier, quotaDayUtc, resetsAt, planDaysAccessible, food, ai, adRewards: { used: adRewards.used, max: adRewards.max, remaining: adRewards.remaining } };
+  const parsed: LimitSnapshot = { tier, quotaDayUtc, resetsAt, planDaysAccessible, food, ai, adRewards: { used: adRewards.used, max: adRewards.max, remaining: adRewards.remaining } };
+  if ('capabilities' in value) {
+    const capabilities = parseCapabilities(value.capabilities);
+    if (!capabilities) return null;
+    parsed.capabilities = capabilities;
+  }
+  return parsed;
 }
 
 export async function loadLimits(userId: string): Promise<LimitSnapshot> {

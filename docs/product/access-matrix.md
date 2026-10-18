@@ -25,3 +25,16 @@ Rules that do not change:
 - Prices come from the store. Existing proposed prices (RM 39.90 monthly, RM 199 yearly, RM 399 lifetime) stay as proposed until store review. No new tier is sold before its benefits exist.
 
 Open decisions for the owner: buddy and health-sync tiers; whether a short free coach explanation of the week should not consume the daily message; the final premium fair-use wording (must exist before selling it).
+
+## How the policy is switched on (B1, implemented 18 October 2026)
+
+The mechanism exists on the development project and is **off**, so current behaviour (3 food logs per UTC day, 14 free plan days) is unchanged until the owner decides. To turn the proposed free core on:
+
+```sql
+update public.app_config set value = 'true'::jsonb where key = 'manual_food_unlimited';
+update public.app_config set value = '120'::jsonb  where key = 'free_plan_days';
+```
+
+To go back, set them to `false` and `14`. Nothing else needs a deploy. `check-limit` then reports unlimited manual food for free accounts, 120 accessible plan days, and a `capabilities` object (`basicPlan`, `manualFood`, `adaptiveProgression`, `mealPlanner`, `photoFood`, `coach`). While `manual_food_unlimited` is true, `request-ad-reward` refuses food rewards (`409 reward_unavailable`); AI rewards and already earned credits are untouched.
+
+The adaptive, meal-planner and photo capabilities are reported now but gate nothing yet: each feature will enforce its own server check when it is built (roadmap C2, D2, F2).

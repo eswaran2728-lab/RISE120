@@ -1,6 +1,6 @@
 import { supabase } from '../../lib/supabase';
 import { readCache, writeCache } from '../../cache/userCache';
-import { accessStatus, formatReset, loadLimits, loadLimitsOrCached, lockedPlanDay, parseLimitSnapshot, unlockActions, LimitSnapshot } from '../limits';
+import { accessStatus, capabilitiesOf, formatReset, loadLimits, loadLimitsOrCached, lockedPlanDay, parseLimitSnapshot, unlockActions, LimitSnapshot } from '../limits';
 
 jest.mock('../../lib/supabase', () => ({ supabase: { functions: { invoke: jest.fn() } } }));
 jest.mock('../../cache/userCache', () => ({ readCache: jest.fn(), writeCache: jest.fn().mockResolvedValue(undefined) }));
@@ -33,6 +33,34 @@ describe('parseLimitSnapshot', () => {
       expect(parseLimitSnapshot(value)).toBeNull();
     }
   );
+});
+
+describe('capabilities', () => {
+  const all = { basicPlan: true, manualFood: true, adaptiveProgression: true, mealPlanner: true, photoFood: true, coach: true };
+
+  it('reads the capabilities the server sent', () => {
+    const sent = { ...all, adaptiveProgression: false, mealPlanner: false, photoFood: false };
+
+    expect(parseLimitSnapshot(snapshot({ capabilities: sent }))?.capabilities).toEqual(sent);
+    expect(capabilitiesOf(snapshot({ capabilities: sent }))).toEqual(sent);
+  });
+
+  it.each([[{ ...all, mealPlanner: 'yes' }], [{ basicPlan: true }], ['all'], [null]])('rejects malformed capabilities: %j', (bad) => {
+    expect(parseLimitSnapshot({ ...snapshot(), capabilities: bad })).toBeNull();
+  });
+
+  it('still accepts an older server answer (or a remembered one) with no capabilities', () => {
+    expect(parseLimitSnapshot(snapshot())).not.toBeNull();
+  });
+
+  it('works out safe capabilities from an older answer: paid features only for premium, food by what is left', () => {
+    expect(capabilitiesOf(snapshot())).toEqual({ basicPlan: true, manualFood: false, adaptiveProgression: false, mealPlanner: false, photoFood: false, coach: true });
+    expect(capabilitiesOf(snapshot({ tier: 'premium', food: { used: 9, base: null, bonus: 0, remaining: null }, ai: { used: 0, base: null, bonus: 0, remaining: null } }))).toEqual(all);
+  });
+
+  it('never grants a paid feature when there is no snapshot at all', () => {
+    expect(capabilitiesOf(null)).toEqual({ basicPlan: false, manualFood: false, adaptiveProgression: false, mealPlanner: false, photoFood: false, coach: false });
+  });
 });
 
 describe('loadLimits', () => {
