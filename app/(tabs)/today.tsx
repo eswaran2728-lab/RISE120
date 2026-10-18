@@ -127,6 +127,9 @@ function TodayScreen() {
       <View style={styles.center}>
         <Text style={styles.completeTitle}>{t('today.planComplete')}</Text>
         <Text style={styles.message}>{t('today.planCompleteBody')}</Text>
+        <TouchableOpacity testID="today-review-cycle" accessibilityRole="button" style={styles.button} onPress={() => router.push('/cycle-review' as Href)}>
+          <Text style={styles.buttonText}>{t('today.reviewCycle')}</Text>
+        </TouchableOpacity>
         {settingsLink}
       </View>
     );

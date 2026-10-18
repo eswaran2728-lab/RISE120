@@ -24,3 +24,18 @@ export async function loadCheckinDates(userId: string): Promise<LocalDate[]> {
   }
   return [...dates];
 }
+
+// Every date the user has logged at least one workout set: synced rows plus sets still waiting to sync.
+export async function loadWorkoutDates(userId: string): Promise<LocalDate[]> {
+  const dates = new Set<LocalDate>();
+  try {
+    const { data, error } = await supabase.from('workout_logs').select('log_date').eq('user_id', userId);
+    if (!error) for (const row of data ?? []) dates.add(row.log_date as LocalDate);
+  } catch {
+    // Offline: only what is waiting to sync is known.
+  }
+  for (const op of await listPending(userId)) {
+    if (op.kind === 'workout_set') dates.add(op.date);
+  }
+  return [...dates];
+}
