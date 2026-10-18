@@ -42,7 +42,7 @@ export function FoodEntry({ food, initialQuantity = '1', initialMeal, submitLabe
       <Text style={styles.meta}>{`${round1(food.calories)} ${t('today.kcal')} · ${t('food.protein')} ${round1(food.proteinG)} g · ${t('food.carbs')} ${round1(food.carbsG)} g · ${t('food.fat')} ${round1(food.fatG)} g`}</Text>
 
       <Text style={styles.label}>{t('food.entry.servings')}</Text>
-      <TextInput style={styles.input} value={quantityText} onChangeText={setQuantityText} keyboardType="decimal-pad" selectTextOnFocus />
+      <TextInput accessibilityLabel={t('food.entry.servings')} style={styles.input} value={quantityText} onChangeText={setQuantityText} keyboardType="decimal-pad" selectTextOnFocus />
       {quantityError ? <Text style={styles.errorText}>{quantityError}</Text> : null}
       {total && parsed.ok ? (
         <Text style={styles.total}>{`${t('food.entry.total')}: ${formatServing(parsed.quantity, food.servingDesc)} = ${round1(total.calories)} ${t('today.kcal')}`}</Text>

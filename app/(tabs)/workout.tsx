@@ -223,9 +223,9 @@ function WorkoutScreen() {
             {open ? (
               <View style={styles.form}>
                 <Text style={styles.label}>{t('workout.reps')}</Text>
-                <TextInput style={styles.input} value={repsText} onChangeText={setRepsText} keyboardType="number-pad" />
+                <TextInput accessibilityLabel={t('workout.reps')} style={styles.input} value={repsText} onChangeText={setRepsText} keyboardType="number-pad" />
                 <Text style={styles.label}>{t(units === 'imperial' ? 'workout.weightLb' : 'workout.weightKg')}</Text>
-                <TextInput style={styles.input} value={weightText} onChangeText={setWeightText} keyboardType="decimal-pad" />
+                <TextInput accessibilityLabel={t(units === 'imperial' ? 'workout.weightLb' : 'workout.weightKg')} style={styles.input} value={weightText} onChangeText={setWeightText} keyboardType="decimal-pad" />
                 {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
                 <View style={styles.row}>

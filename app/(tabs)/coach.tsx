@@ -146,7 +146,7 @@ export default function CoachScreen() {
       </ScrollView>
 
       <View style={styles.composer}>
-        <TextInput
+        <TextInput accessibilityLabel={t('coach.placeholder')}
           testID="coach-input"
           style={styles.input}
           value={view.draft}

@@ -222,7 +222,7 @@ export default function OnboardingStep() {
   const field = (label: string, value: string, onChange: (v: string) => void, error?: string) => (
     <View style={styles.field}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
+      <TextInput accessibilityLabel={label}
         style={styles.input}
         value={value}
         onChangeText={onChange}
@@ -301,11 +301,11 @@ export default function OnboardingStep() {
 
       <View style={styles.footer}>
         {step > 1 && (
-          <TouchableOpacity style={[styles.button, styles.secondaryButton]} onPress={onBack} disabled={submitting}>
+          <TouchableOpacity accessibilityRole="button" style={[styles.button, styles.secondaryButton]} onPress={onBack} disabled={submitting}>
             <Text style={styles.secondaryButtonText}>{t('onboarding.back')}</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity
+        <TouchableOpacity accessibilityRole="button"
           style={[styles.button, styles.primaryButton, (!canProceed || submitting) && styles.disabled]}
           onPress={onNext}
           disabled={!canProceed || submitting}

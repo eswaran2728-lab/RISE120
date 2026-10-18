@@ -108,11 +108,11 @@ export default function CheckinScreen() {
       <Text style={styles.title}>{t('checkin.title')}</Text>
 
       <Text style={styles.label}>{t(units === 'imperial' ? 'checkin.weightLb' : 'checkin.weightKg')}</Text>
-      <TextInput style={styles.input} value={weightText} onChangeText={setWeightText} keyboardType="decimal-pad" />
+      <TextInput accessibilityLabel={t(units === 'imperial' ? 'checkin.weightLb' : 'checkin.weightKg')} style={styles.input} value={weightText} onChangeText={setWeightText} keyboardType="decimal-pad" />
       {errors.weight ? <Text style={styles.errorText}>{errors.weight}</Text> : null}
 
       <Text style={styles.label}>{t('checkin.sleep')}</Text>
-      <TextInput style={styles.input} value={sleepText} onChangeText={setSleepText} keyboardType="decimal-pad" />
+      <TextInput accessibilityLabel={t('checkin.sleep')} style={styles.input} value={sleepText} onChangeText={setSleepText} keyboardType="decimal-pad" />
       {errors.sleep ? <Text style={styles.errorText}>{errors.sleep}</Text> : null}
 
       <Text style={styles.label}>{t('checkin.mood')}</Text>
@@ -134,7 +134,7 @@ export default function CheckinScreen() {
       <TouchableOpacity accessibilityRole="button" style={styles.secondaryButton} onPress={pickPhoto}>
         <Text style={styles.secondaryText}>{t(newPhotoUri || hasSavedPhoto ? 'checkin.changePhoto' : 'checkin.addPhoto')}</Text>
       </TouchableOpacity>
-      {newPhotoUri ? <Image source={{ uri: newPhotoUri }} style={styles.preview} /> : null}
+      {newPhotoUri ? <Image accessibilityLabel={t('checkin.photoPending')} source={{ uri: newPhotoUri }} style={styles.preview} /> : null}
       {newPhotoUri ? <Text style={styles.hint}>{t('checkin.photoPending')}</Text> : null}
       {!newPhotoUri && hasSavedPhoto ? <Text style={styles.hint}>{t('checkin.photoSaved')}</Text> : null}
       <Text style={styles.hint}>{t('checkin.photoPrivate')}</Text>

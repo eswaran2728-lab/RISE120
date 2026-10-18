@@ -124,7 +124,7 @@ export default function FoodEditScreen() {
   const field = (key: FoodField, label: string, numeric: boolean) => (
     <View style={styles.field} key={key}>
       <Text style={styles.label}>{label}</Text>
-      <TextInput
+      <TextInput accessibilityLabel={label}
         style={styles.input}
         value={fields[key]}
         onChangeText={(text) => setFields((current) => ({ ...current, [key]: text }))}

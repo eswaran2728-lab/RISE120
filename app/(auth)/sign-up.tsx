@@ -49,7 +49,7 @@ export default function SignUpScreen() {
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
       {infoMessage ? <Text style={styles.infoText}>{infoMessage}</Text> : null}
 
-      <TextInput
+      <TextInput accessibilityLabel={t('auth.email')}
         style={styles.input}
         placeholder={t('auth.email')}
         placeholderTextColor={tokens.color.textSecondary}
@@ -59,7 +59,7 @@ export default function SignUpScreen() {
         keyboardType="email-address"
       />
 
-      <TextInput
+      <TextInput accessibilityLabel={t('auth.password')}
         style={styles.input}
         placeholder={t('auth.password')}
         placeholderTextColor={tokens.color.textSecondary}
@@ -68,7 +68,7 @@ export default function SignUpScreen() {
         secureTextEntry
       />
 
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={[styles.button, styles.primaryButton]}
         onPress={handleSignUp}
         disabled={loading}
@@ -80,7 +80,7 @@ export default function SignUpScreen() {
         )}
       </TouchableOpacity>
 
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={[styles.button, styles.secondaryButton]}
         onPress={handleGoogleSignIn}
         disabled={loading}
@@ -88,7 +88,7 @@ export default function SignUpScreen() {
         <Text style={styles.secondaryButtonText}>{t('auth.google')}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity
+      <TouchableOpacity accessibilityRole="button"
         style={styles.linkButton}
         onPress={() => router.push('/(auth)/sign-in')}
       >

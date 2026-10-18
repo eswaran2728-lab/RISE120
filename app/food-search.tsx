@@ -186,7 +186,7 @@ export default function FoodSearchScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
-        <TextInput
+        <TextInput accessibilityLabel={t('food.search.placeholder')}
           style={styles.input}
           value={query}
           onChangeText={setQuery}
