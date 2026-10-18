@@ -9,6 +9,8 @@ import { deleteAccount, signOut } from '../src/auth/authService';
 import { supabase } from '../src/lib/supabase';
 import { updateProfilePreference } from '../src/settings/preferences';
 import { cacheUnits } from '../src/profile/cache';
+import { ReminderSettings } from '../src/notifications/ReminderSettings';
+import { expoNotificationApi } from '../src/notifications/expoApi';
 
 const LANGUAGES = ['en', 'ms', 'ta'] as const;
 const UNITS = ['metric', 'imperial'] as const;
@@ -116,6 +118,8 @@ export default function SettingsScreen() {
           </Text>
         </TouchableOpacity>
       ))}
+
+      {userId ? <ReminderSettings userId={userId} api={expoNotificationApi} /> : null}
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
