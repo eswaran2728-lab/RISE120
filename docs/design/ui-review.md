@@ -15,7 +15,7 @@ Status at 18 October 2026. This file records what has been checked and what has 
 | Colour tokens (bg, surface, gold accent, text, secondary text, dark-on-gold) | Done | Jest contrast tests |
 | Today: real journey-day arc, one gold session card with one action, separate small steps | Done | Jest interaction tests; not seen on a phone |
 | Five-tab bar restyled (same order, line icons, 48-point items) | Done | Jest tests; not seen on a phone |
-| Shared accessible components (roadmap A2) | See the A2 commit | |
+| Shared accessible components (roadmap A2): ActionButton, SectionCard, AsyncState, SyncNotice, ScreenFrame | Done; no screen uses them yet | Jest component tests; not seen on a phone |
 | Workout, Food, Coach, Progress, Settings restyle (roadmap A3) | Not started | |
 
 ## Checks the owner still has to do (not done by the implementer)
