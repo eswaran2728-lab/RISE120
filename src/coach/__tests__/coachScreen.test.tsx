@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, create, ReactTestRenderer } from 'react-test-renderer';
 import CoachScreen from '../../../app/(tabs)/coach';
-import { t } from '../../i18n';
+import i18next, { t } from '../../i18n';
 import { decideProposal, loadHistory, sendCoachMessage } from '../api';
 import { loadLimitsOrCached, LimitSnapshot } from '../../monetization/limits';
 import { useUnlock } from '../../monetization/useUnlock';
@@ -847,5 +847,110 @@ describe('switching accounts', () => {
     expect(mocked.history).not.toHaveBeenCalled();
     expect(mocked.send).not.toHaveBeenCalled();
     expect(shows(tree, 'question')).toBe(false);
+  });
+});
+
+describe('switching A to B and back to A', () => {
+  it('keeps what A typed after coming back when A\'s earlier reply finally arrives', async () => {
+    const reply = deferred<unknown>();
+    mocked.send.mockReturnValue(reply.promise);
+    const tree = await mount();
+    await typeIn(tree, 'first question');
+    await press(tree, 'coach-send');
+    await switchTo(tree, 'B');
+    await switchTo(tree, 'A');
+    await typeIn(tree, 'a new unsent draft');
+
+    await act(async () => reply.resolve(answered(exchange('1', { message: 'first question', reply: 'first answer' }))));
+
+    expect(shows(tree, 'first answer')).toBe(true); // A's own answer still belongs to A
+    expect(idOf(tree, 'coach-input').props.value).toBe('a new unsent draft'); // and does not erase newer input
+  });
+
+  it('keeps what is typed while a send is running, for the same account', async () => {
+    const reply = deferred<unknown>();
+    mocked.send.mockReturnValue(reply.promise);
+    const tree = await mount();
+    await typeIn(tree, 'first question');
+    await press(tree, 'coach-send');
+    await typeIn(tree, 'typed while waiting');
+
+    await act(async () => reply.resolve(answered(exchange('1', { message: 'first question', reply: 'first answer' }))));
+
+    expect(idOf(tree, 'coach-input').props.value).toBe('typed while waiting');
+  });
+
+  it('still clears the box when the answered message is the one in the box', async () => {
+    mocked.send.mockResolvedValue(answered(exchange('1', { message: 'first question', reply: 'first answer' })));
+    const tree = await mount();
+    await typeIn(tree, 'first question');
+
+    await press(tree, 'coach-send');
+
+    expect(idOf(tree, 'coach-input').props.value).toBe('');
+  });
+
+  it('shows A\'s answer from the server after coming back, and lets A send again', async () => {
+    const reply = deferred<unknown>();
+    mocked.send.mockReturnValueOnce(reply.promise).mockImplementation(async (requestId: string, message: string) => answered(exchange('2', { requestId, message, reply: 'second answer' })));
+    mocked.history.mockResolvedValue([]);
+    const tree = await mount();
+    await typeIn(tree, 'first question');
+    await press(tree, 'coach-send');
+    await switchTo(tree, 'B');
+    await act(async () => reply.resolve(answered(exchange('1', { message: 'first question', reply: 'first answer' })))); // arrives while B is shown
+    expect(shows(tree, 'first answer')).toBe(false);
+
+    mocked.history.mockResolvedValue([exchange('1', { message: 'first question', reply: 'first answer' })]);
+    await switchTo(tree, 'A');
+    expect(shows(tree, 'first answer')).toBe(true);
+    await typeIn(tree, 'second question');
+    await press(tree, 'coach-send');
+
+    expect(mocked.send).toHaveBeenCalledTimes(2);
+    expect(shows(tree, 'second answer')).toBe(true);
+  });
+
+  it('never lets A\'s earlier failure replace the state of a newer A request', async () => {
+    const first = deferred<unknown>();
+    const second = deferred<unknown>();
+    mocked.send.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const tree = await mount();
+    await typeIn(tree, 'first question');
+    await press(tree, 'coach-send');
+    await switchTo(tree, 'B');
+    await switchTo(tree, 'A');
+
+    await act(async () => first.resolve({ kind: 'offline' }));
+    await typeIn(tree, 'second question');
+    await press(tree, 'coach-send');
+    await act(async () => second.resolve(answered(exchange('2', { message: 'second question', reply: 'second answer' }))));
+
+    expect(shows(tree, 'second answer')).toBe(true);
+    expect(maybe(tree, 'coach-check-again')).toBeUndefined(); // the old offline notice is gone, not resurrected
+  });
+});
+
+describe('screen smoke test in every language', () => {
+  afterEach(async () => {
+    await i18next.changeLanguage('en');
+  });
+
+  it.each(['en', 'ms', 'ta'])('renders the history, an unknown-outcome notice and a proposal in %s without a missing translation', async (language) => {
+    await i18next.changeLanguage(language);
+    mocked.history.mockResolvedValue([exchange('1', { proposal: pending() })]);
+    mocked.send.mockResolvedValue({ kind: 'unknown_outcome' });
+    const tree = await mount();
+    await typeIn(tree, 'a question');
+    await press(tree, 'coach-send');
+
+    const all = textsOf(tree);
+    expect(all.some((s) => /\bcoach\.[a-z]+/i.test(s))).toBe(false); // no raw translation key on screen
+    expect(shows(tree, t('coach.title'))).toBe(true);
+    expect(shows(tree, t('coach.unknownOutcome'))).toBe(true);
+    expect(shows(tree, t('coach.proposal.accept'))).toBe(true);
+    expect(maybe(tree, 'coach-check-again')).toBeDefined();
+    expect(maybe(tree, 'coach-ask-again')).toBeDefined();
+    expect(mocked.send).toHaveBeenCalledTimes(1); // nothing was repeated by itself
   });
 });

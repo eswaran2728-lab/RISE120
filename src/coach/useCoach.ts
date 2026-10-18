@@ -165,7 +165,9 @@ export function useCoach() {
         patch(forUser, (v) => {
           const history = upsertExchange(v.history, result.exchange);
           void writeCoachCache(forUser, history);
-          return { ...v, history, draft: '', attempt: null, proposalDropped: result.proposalDropped };
+          // Clear the box only if it still holds the message that was answered: text typed meanwhile is kept.
+          const draft = v.draft.trim() === message ? '' : v.draft;
+          return { ...v, history, draft, attempt: null, proposalDropped: result.proposalDropped };
         });
         void refreshLimits(forUser);
         return;
