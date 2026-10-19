@@ -24,6 +24,7 @@ export const supabaseTransport: SyncTransport = {
         set_number: op.setNumber,
         reps: op.reps,
         weight_kg: op.weightKg,
+        ...(op.sessionId ? { session_id: op.sessionId } : {}),
       },
       { onConflict: 'id' }
     );

@@ -259,6 +259,22 @@ switch on quiet hours (9 pm to 7 am). The text is generic and says nothing about
 - **Not verified on a phone:** delivery with the app closed, after a reboot, with permission revoked, in battery
   saver, and across a real time-zone or daylight-saving change.
 
+## Workout demonstrations, swaps and finishing (roadmap C3; server-tested, not run on a phone)
+
+- **Swap:** `session-actions` swaps only the sets still to do. Sets already logged stay under the original exercise.
+  A swap names the session revision it was made against; a stale revision is refused (409) and the screen reloads.
+  A replacement must be a published, reviewed alternative, usable with the member's equipment where the session
+  happens, and not already in the session. A repeated request id returns the same answer and changes nothing.
+  The started snapshot stays immutable: swaps are an append-only record (`workout_session_swaps`).
+- **Finish:** completing records a summary of the sets actually logged (not the planned volume) once. A repeat, or two
+  taps at once, return the same summary and finish time. A session with nothing logged cannot be finished.
+- **Demonstration:** the written cues always show. A video opens only when the person taps, only from an https link;
+  if it cannot open, or there is none, the cues stay and a note says why. The catalogue is kept on the phone for offline.
+- **Entry point:** `app/exercise.tsx` takes `sessionId` and `exerciseId`. Nothing links to it yet: the screens that
+  choose and start a session (rest of C2) are not built, so no session exists to open from the Workout tab.
+- **Sets in a session:** the offline queue carries an optional `sessionId`; `exercise_links` (empty until content is
+  linked) maps each catalogue exercise to the exercise that logged sets use.
+
 ## Edge functions
 
 Functions called by the app verify the caller's JWT inside the function (user id comes from the token only, never the body), so all functions are deployed with `--no-verify-jwt`. `revenuecat-webhook` and `grant-ad-reward` are called by RevenueCat and Google, which cannot send a Supabase JWT; they trust only their header secret or Google's signature:

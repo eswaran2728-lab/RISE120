@@ -103,6 +103,18 @@ describe('queueWorkoutSet', () => {
     expect(heard).not.toHaveBeenCalled();
   });
 
+  it('remembers which started session a set belongs to, for the summary and swaps', async () => {
+    await queueWorkoutSet('u1', '2026-10-13', { ...input, sessionId: 'session-1' });
+
+    expect((await listPending('u1'))[0]).toMatchObject({ sessionId: 'session-1' });
+  });
+
+  it('leaves the session out for a set logged outside a started session', async () => {
+    await queueWorkoutSet('u1', '2026-10-13', input);
+
+    expect(await listPending('u1')).toEqual([expect.not.objectContaining({ sessionId: expect.anything() })]);
+  });
+
   it('creates one pending set after a double tap', async () => {
     await Promise.all([queueWorkoutSet('u1', '2026-10-13', input), queueWorkoutSet('u1', '2026-10-13', input)]);
 
@@ -173,6 +185,17 @@ describe('mergeSets and nextSetNumber', () => {
 
     expect(nextSetNumber(merged, 'ex-1')).toBe(4);
     expect(nextSetNumber(merged, 'ex-2')).toBe(1);
+  });
+});
+
+describe('rest timer across the app being backgrounded', () => {
+  it('is worked out from device timestamps, so time spent in the background still counts down', () => {
+    const started = 1_000_000;
+
+    expect(restRemaining(started, started + 20_000, 60)).toBe(40);
+    // the app was suspended for 45 s and resumed: nothing ticked meanwhile, yet the answer is right
+    expect(restRemaining(started, started + 65_000, 60)).toBe(0);
+    expect(restRemaining(started, started - 5_000, 60)).toBe(60); // a clock that went backwards never extends rest
   });
 });
 

@@ -202,7 +202,7 @@ describe('RootLayout profile lookup', () => {
     mockSession = { user: { id: 'u1' } };
   });
 
-  it.each(['plan-preview', 'checkin', 'food-edit', 'food-search', 'food-scan'])('leaves an onboarded user on the %s screen', async (segment) => {
+  it.each(['exercise', 'plan-preview', 'checkin', 'food-edit', 'food-search', 'food-scan'])('leaves an onboarded user on the %s screen', async (segment) => {
     mockSegments = [segment];
     mockProfileLookup({ data: { ...COMPLETE_PROFILE }, error: null });
 

@@ -59,6 +59,15 @@ describe('supabaseTransport', () => {
     );
   });
 
+  it('sends the session a set belongs to when it has one, and nothing extra when it has none', async () => {
+    await supabaseTransport.upsertWorkoutSet('A', { ...set, sessionId: 'session-1' });
+
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ id: 'set-1', session_id: 'session-1' }), { onConflict: 'id' });
+    upsert.mockClear();
+    await supabaseTransport.upsertWorkoutSet('A', set);
+    expect(upsert.mock.calls[0][0]).not.toHaveProperty('session_id');
+  });
+
   it('upserts a check-in on (user, date) so the latest edit wins', async () => {
     await supabaseTransport.upsertCheckin('A', checkin);
 

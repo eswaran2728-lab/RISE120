@@ -28,7 +28,7 @@ export type SessionChoice =
 const LEVEL_RANK: Record<Level, number> = { beginner: 0, intermediate: 1, advanced: 2 };
 
 // Which exercise equipment classes can be done. At a gym everything; at home only what the member has.
-function usableEquipment(location: 'home' | 'gym', equipment: Equipment): Equipment[] {
+export function usableEquipment(location: 'home' | 'gym', equipment: Equipment): Equipment[] {
   if (location === 'gym') return ['gym', 'home', 'none'];
   return equipment === 'none' ? ['none'] : ['home', 'none'];
 }

@@ -62,6 +62,7 @@ export interface WorkoutSetInput {
   reps: string;
   weight: string;
   units: 'metric' | 'imperial';
+  sessionId?: string;
 }
 
 export async function queueWorkoutSet(userId: string, day: LocalDate, set: WorkoutSetInput): Promise<string> {
@@ -77,6 +78,7 @@ export async function queueWorkoutSet(userId: string, day: LocalDate, set: Worko
     setNumber: set.setNumber,
     reps: parsed.reps,
     weightKg: parsed.weightKg,
+    ...(set.sessionId ? { sessionId: set.sessionId } : {}),
     updatedAt: Date.now(),
   });
   notifyWorkoutSetLogged(userId);

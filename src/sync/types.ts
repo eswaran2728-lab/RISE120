@@ -16,6 +16,7 @@ export interface WorkoutSetOperation extends OperationBase {
   setNumber: number;
   reps: number;
   weightKg: number;
+  sessionId?: string; // the started session this set belongs to, when it was logged inside one
 }
 
 export interface CheckinOperation extends OperationBase {
