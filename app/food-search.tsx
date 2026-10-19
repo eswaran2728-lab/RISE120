@@ -20,6 +20,7 @@ import { useDebouncedValue } from '../src/lib/useDebouncedValue';
 import { flushPending } from '../src/sync/flush';
 import { supabaseTransport } from '../src/sync/supabaseTransport';
 import { recentFoods } from '../src/food/cache';
+import { compareToCurrent, Favourite, loadFavourites, rememberServings, toggleFavourite } from '../src/food/favourites';
 import { newLogId, queueFoodLog } from '../src/food/log';
 import { findFoods } from '../src/food/search';
 import { defaultMealFor, foodSourceLabel } from '../src/food/summary';
@@ -48,6 +49,7 @@ export default function FoodSearchScreen() {
   const [query, setQuery] = useState('');
   const debounced = useDebouncedValue(query.trim(), 300);
   const [recent, setRecent] = useState<Food[]>([]);
+  const [favourites, setFavourites] = useState<Favourite[]>([]);
   // Results are tagged with the query they belong to, so "searching" is simply "no results for the
   // current query yet".
   const [resultSet, setResultSet] = useState<{ query: string; foods: Food[]; hasMore: boolean; offline: boolean; page: number } | null>(null);
@@ -56,7 +58,7 @@ export default function FoodSearchScreen() {
   const [worldwideError, setWorldwideError] = useState<string | null>(null);
   const [worldwideBusy, setWorldwideBusy] = useState(false);
 
-  const [selected, setSelected] = useState<{ food: Food; entryId: string } | null>(null);
+  const [selected, setSelected] = useState<{ food: Food; entryId: string; initialQuantity?: string } | null>(null);
   const [savingFood, setSavingFood] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -65,6 +67,7 @@ export default function FoodSearchScreen() {
     if (!userId) return;
     let alive = true;
     void recentFoods(userId).then((foods) => alive && setRecent(foods));
+    void loadFavourites(userId).then((list) => alive && setFavourites(list));
     return () => {
       alive = false;
     };
@@ -139,6 +142,7 @@ export default function FoodSearchScreen() {
       // The meal goes on the day the user is actually logging it, even if this screen was left open
       // overnight, so it appears on today's Food tab.
       await queueFoodLog(userId, localDateString(), { id: selected.entryId, food: selected.food, quantity, mealType: meal });
+      await rememberServings(userId, selected.food.id, quantity);
       void flushPending(userId, supabaseTransport).catch(() => undefined);
       if (router.canGoBack()) router.back();
       else router.replace('/(tabs)/food' as Href);
@@ -154,6 +158,7 @@ export default function FoodSearchScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <FoodEntry
           food={selected.food}
+          initialQuantity={selected.initialQuantity}
           initialMeal={initialMeal}
           submitLabelKey="food.entry.add"
           busy={busy}
@@ -165,15 +170,58 @@ export default function FoodSearchScreen() {
     );
   }
 
+  const flip = async (food: Food) => {
+    if (!userId) return;
+    await toggleFavourite(userId, food);
+    setFavourites(await loadFavourites(userId));
+  };
+  const isFav = (food: Food) => favourites.some((f) => f.food.id === food.id);
+  const star = (food: Food) => (
+    <TouchableOpacity
+      testID={`favourite-toggle-${food.id}`}
+      accessibilityRole="button"
+      accessibilityLabel={t(isFav(food) ? 'food.favourites.remove' : 'food.favourites.add')}
+      style={styles.editButton}
+      onPress={() => flip(food)}
+    >
+      <Text style={styles.linkText}>{isFav(food) ? '★' : '☆'}</Text>
+    </TouchableOpacity>
+  );
+
+  // A favourite shows the version that was saved. If the latest version seen differs, it says so.
+  const favouriteRow = (fav: Favourite) => {
+    const food = fav.food;
+    const label = foodSourceLabel(food);
+    const latest = recent.find((r) => r.id === food.id) ?? null;
+    const changed = latest !== null && compareToCurrent(fav, latest) === 'changed';
+    return (
+      <View key={food.id} style={styles.rowWrap}>
+        <TouchableOpacity
+          testID={`favourite-${food.id}`}
+          accessibilityRole="button"
+          style={styles.rowMain}
+          onPress={() => setSelected({ food, entryId: newLogId(), initialQuantity: String(fav.lastServings) })}
+        >
+          <Text style={styles.name}>{food.name}</Text>
+          <Text style={styles.meta}>{`${food.servingDesc}  ·  ${round1(food.calories)} ${t('today.kcal')}`}</Text>
+          <Text style={label.verified ? styles.verified : styles.meta}>{`${t(label.key)}${label.verified ? ` · ${t('food.verified')}` : ''}`}</Text>
+          {changed ? <Text style={styles.warning}>{t('food.favourites.changed')}</Text> : null}
+        </TouchableOpacity>
+        {star(food)}
+      </View>
+    );
+  };
+
   const row = (food: Food) => {
     const label = foodSourceLabel(food);
     return (
       <View key={food.id} style={styles.rowWrap}>
-        <TouchableOpacity accessibilityRole="button" style={styles.rowMain} onPress={() => setSelected({ food, entryId: newLogId() })}>
+        <TouchableOpacity testID={`food-row-${food.id}`} accessibilityRole="button" style={styles.rowMain} onPress={() => setSelected({ food, entryId: newLogId(), initialQuantity: String(favourites.find((f) => f.food.id === food.id)?.lastServings ?? 1) })}>
           <Text style={styles.name}>{food.name}</Text>
           <Text style={styles.meta}>{`${food.servingDesc}  ·  ${round1(food.calories)} ${t('today.kcal')}`}</Text>
           <Text style={label.verified ? styles.verified : styles.meta}>{`${t(label.key)}${label.verified ? ` · ${t('food.verified')}` : ''}`}</Text>
         </TouchableOpacity>
+        {star(food)}
         {food.source === 'custom' && food.userId !== null ? (
           <TouchableOpacity accessibilityRole="button" style={styles.editButton} onPress={() => router.push(`/food-edit?id=${food.id}` as Href)}>
             <Text style={styles.linkText}>{t('food.custom.edit')}</Text>
@@ -198,6 +246,13 @@ export default function FoodSearchScreen() {
         />
 
         {offline && searchingNow ? <Text style={styles.warning}>{t('food.search.offline')}</Text> : null}
+        {!searchingNow && favourites.length > 0 ? (
+          <>
+            <Text style={styles.heading}>{t('food.favourites.title')}</Text>
+            {favourites.map(favouriteRow)}
+          </>
+        ) : null}
+        {!searchingNow && favourites.length === 0 ? <Text style={styles.meta}>{t('food.favourites.empty')}</Text> : null}
         {!searchingNow && recent.length > 0 ? <Text style={styles.heading}>{t('food.search.recent')}</Text> : null}
         {searching ? <ActivityIndicator color={tokens.color.accent} style={styles.spinner} /> : null}
 

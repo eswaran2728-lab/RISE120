@@ -26,7 +26,7 @@ jest.mock('../../monetization/useUnlock', () => ({ useUnlock: jest.fn() }));
 const byId = (tree: ReactTestRenderer, id: string) => tree.root.findAll((n) => n.props.testID === id && typeof n.type !== 'string' && typeof n.props.onPress === 'function').pop();
 
 describe('the Food tab', () => {
-  it('links to the meal planner, and keeps the manual add buttons', async () => {
+  it('links to the meal planner and eating-out guidance, and keeps the manual add buttons', async () => {
     (loadFoodDay as jest.Mock).mockResolvedValue(buildFoodDay({ date: '2026-10-19', synced: [], pending: [], knownFoods: [] }));
     (loadPlanBundle as jest.Mock).mockResolvedValue(null);
     (loadLimitsOrCached as jest.Mock).mockResolvedValue(null);
@@ -41,6 +41,10 @@ describe('the Food tab', () => {
     });
 
     expect(mockPush).toHaveBeenCalledWith('/meal-planner');
+    await act(async () => {
+      byId(tree, 'food-open-eating-out')!.props.onPress();
+    });
+    expect(mockPush).toHaveBeenCalledWith('/eating-out');
     expect(tree.root.findAll((n) => typeof n.props.onPress === 'function' && n.findAll((m) => (m.type as unknown) === 'Text' && typeof m.children[0] === 'string' && (m.children[0] as string).startsWith('+ ')).length > 0).length).toBeGreaterThan(0);
   });
 });

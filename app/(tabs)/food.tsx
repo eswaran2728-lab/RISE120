@@ -179,6 +179,9 @@ function FoodScreen() {
       <TouchableOpacity testID="food-open-planner" accessibilityRole="button" style={styles.addButton} onPress={() => router.push('/meal-planner' as Href)}>
         <Text style={styles.addText}>{t('planner.open')}</Text>
       </TouchableOpacity>
+      <TouchableOpacity testID="food-open-eating-out" accessibilityRole="button" style={styles.addButton} onPress={() => router.push('/eating-out' as Href)}>
+        <Text style={styles.addText}>{t('eatingOut.open')}</Text>
+      </TouchableOpacity>
 
       <View style={styles.card}>
         <View style={styles.summaryRow}>

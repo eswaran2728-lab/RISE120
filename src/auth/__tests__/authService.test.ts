@@ -263,6 +263,24 @@ describe('authService', () => {
       expect(await recentFoods('u2')).toHaveLength(1);
     });
 
+    it('removes the deleted account favourites, meal choices, recipes and eating-out copies but not another account', async () => {
+      const names = ['favourites', 'mealPrefs', 'recipes', 'eatingOut'] as const;
+      for (const name of names) {
+        await writeCache('u1', name, [{ x: 1 }]);
+        await writeCache('u2', name, [{ x: 2 }]);
+      }
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({ data: { deleted: true }, error: null });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await deleteAccount();
+
+      for (const name of names) {
+        expect(await readCache('u1', name)).toBeNull();
+        expect(await readCache('u2', name)).toEqual([{ x: 2 }]);
+      }
+    });
+
     it('still signs out locally if clearing local photos throws', async () => {
       (removeLocalPhotos as jest.Mock).mockImplementationOnce(() => {
         throw new Error('disk error');
