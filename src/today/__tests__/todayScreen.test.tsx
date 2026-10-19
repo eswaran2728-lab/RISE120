@@ -7,6 +7,7 @@ import { loadPlanBundle } from '../../plan/planData';
 import { loadCheckin } from '../../checkin/load';
 import { loadCheckinDates } from '../load';
 import { loadSessionSets } from '../../workout/session';
+import { loadGuidedProgress } from '../../workout/guidedProgress';
 import { hasSeenPreview } from '../../plan/previewSeen';
 import { loadLimitsOrCached } from '../../monetization/limits';
 import { useUnlock } from '../../monetization/useUnlock';
@@ -29,6 +30,7 @@ jest.mock('../../plan/previewSeen', () => ({ hasSeenPreview: jest.fn() }));
 jest.mock('../../checkin/load', () => ({ loadCheckin: jest.fn() }));
 jest.mock('../load', () => ({ loadCheckinDates: jest.fn() }));
 jest.mock('../../workout/session', () => ({ loadSessionSets: jest.fn() }));
+jest.mock('../../workout/guidedProgress', () => ({ loadGuidedProgress: jest.fn() }));
 jest.mock('../../monetization/limits', () => ({ ...jest.requireActual('../../monetization/limits'), loadLimitsOrCached: jest.fn() }));
 jest.mock('../../ui/GuidedSessionCard', () => ({
   // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -41,6 +43,7 @@ const mocked = {
   checkin: loadCheckin as jest.Mock,
   dates: loadCheckinDates as jest.Mock,
   sets: loadSessionSets as jest.Mock,
+  guided: loadGuidedProgress as jest.Mock,
   preview: hasSeenPreview as jest.Mock,
   limits: loadLimitsOrCached as jest.Mock,
   unlock: useUnlock as jest.Mock,
@@ -104,6 +107,7 @@ beforeEach(async () => {
   mocked.dates.mockResolvedValue([]);
   mocked.limits.mockResolvedValue({ snapshot: null, stale: false });
   mocked.unlock.mockReturnValue({ run: jest.fn() });
+  mocked.guided.mockResolvedValue(null);
 });
 
 describe('journey arc', () => {
@@ -321,6 +325,92 @@ describe('the guided session entry point', () => {
     const tree = await show({ day: restDay() });
 
     expect(tree.root.findAll((n) => (n.type as unknown) === 'GuidedSessionCardStub')).toHaveLength(0);
+  });
+});
+
+describe('workout progress with a guided session', () => {
+  const guided = (status: 'active' | 'completed') => ({ sessionId: 'sess-1', status, planned: [{ exerciseId: 'g1', sets: 2 }, { exerciseId: 'g2', sets: 2 }] });
+  const inSession = (...ids: string[]) => ids.map((exerciseId) => ({ exerciseId, sessionId: 'sess-1' }));
+  const withSets = async (sets: { exerciseId: string; sessionId?: string }[], progress: ReturnType<typeof guided> | null) => {
+    mocked.guided.mockResolvedValue(progress);
+    mocked.plan.mockResolvedValue(bundle(workoutDay()));
+    mocked.sets.mockResolvedValue(sets);
+    mocked.checkin.mockResolvedValue(null);
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(<TodayScreen />);
+    });
+    return tree;
+  };
+
+  it('shows the workout as done once the guided session is finished', async () => {
+    const tree = await withSets(inSession('g1'), guided('completed'));
+
+    expect(shows(tree, t('today.workoutComplete'))).toBe(true);
+    expect(shows(tree, t('today.viewWorkout'))).toBe(true);
+    expect(shows(tree, t('today.statusDone'))).toBe(true);
+  });
+
+  it('shows the workout as done when every planned guided set is logged', async () => {
+    const tree = await withSets(inSession('g1', 'g1', 'g2', 'g2'), guided('active'));
+
+    expect(shows(tree, t('today.workoutComplete'))).toBe(true);
+  });
+
+  it('shows partial guided sets as in progress, not done', async () => {
+    const tree = await withSets(inSession('g1', 'g2'), guided('active'));
+
+    expect(shows(tree, t('today.workoutComplete'))).toBe(false);
+    expect(shows(tree, t('today.resumeWorkout'))).toBe(true);
+    expect(shows(tree, t('today.setsProgress', { done: 2, total: 4 }))).toBe(true);
+  });
+
+  it('does not show a session that was only started as started work', async () => {
+    const tree = await withSets([], guided('active'));
+
+    expect(shows(tree, t('today.workoutComplete'))).toBe(false);
+    expect(shows(tree, t('today.startWorkout'))).toBe(true);
+  });
+
+  it('leaves the regular workout exactly as it was when there is no guided session', async () => {
+    const tree = await withSets(logged(10), null);
+
+    expect(shows(tree, t('today.workoutComplete'))).toBe(true);
+  });
+
+  it('still shows the regular workout when the guided session cannot be read', async () => {
+    mocked.guided.mockRejectedValue(new Error('Network request failed'));
+    mocked.plan.mockResolvedValue(bundle(workoutDay()));
+    mocked.sets.mockResolvedValue(logged(10));
+    mocked.checkin.mockResolvedValue(null);
+    let tree!: ReactTestRenderer;
+    await act(async () => {
+      tree = create(<TodayScreen />);
+    });
+
+    expect(shows(tree, t('today.workoutComplete'))).toBe(true);
+  });
+
+  it('asks for the guided session of this account, this plan and this journey day only', async () => {
+    mocked.plan.mockResolvedValue(bundle(workoutDay(18), '2026-10-01'));
+    mocked.sets.mockResolvedValue([]);
+    mocked.checkin.mockResolvedValue(null);
+    await act(async () => {
+      create(<TodayScreen />);
+    });
+
+    expect(mocked.guided).toHaveBeenCalledWith('A', 'p', 18);
+  });
+
+  it('does not ask on a rest day', async () => {
+    mocked.plan.mockResolvedValue(bundle(restDay()));
+    mocked.sets.mockResolvedValue([]);
+    mocked.checkin.mockResolvedValue(null);
+    await act(async () => {
+      create(<TodayScreen />);
+    });
+
+    expect(mocked.guided).not.toHaveBeenCalled();
   });
 });
 

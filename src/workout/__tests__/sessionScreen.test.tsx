@@ -6,6 +6,7 @@ import * as actions from '../sessionActions';
 import * as availability from '../availability';
 import * as sessionSets from '../session';
 import * as log from '../log';
+import { notifyWorkoutSetLogged } from '../events';
 
 jest.setTimeout(30000);
 
@@ -25,6 +26,7 @@ jest.mock('../../sync/supabaseTransport', () => ({ supabaseTransport: {} }));
 jest.mock('../sessionActions', () => ({ loadSessionExercises: jest.fn(), completeSession: jest.fn() }));
 jest.mock('../availability', () => ({ loadExerciseLinks: jest.fn() }));
 jest.mock('../session', () => ({ loadSessionSets: jest.fn() }));
+jest.mock('../events', () => ({ notifyWorkoutSetLogged: jest.fn() }));
 jest.mock('../log', () => ({ ...jest.requireActual('../log'), queueWorkoutSet: jest.fn() }));
 
 const mocked = {
@@ -70,6 +72,7 @@ async function mount() {
 
 beforeEach(() => {
   mockPush.mockReset();
+  (notifyWorkoutSetLogged as jest.Mock).mockClear();
   Object.values(mocked).forEach((m) => m.mockReset());
   mocked.load.mockResolvedValue(session());
   mocked.links.mockResolvedValue(new Map([['squat', 'u-squat'], ['lunge', 'u-lunge']]));
@@ -187,6 +190,18 @@ describe('opening an exercise and finishing', () => {
     expect(shows(tree, t('exercise.summarySets', { count: 2 }))).toBe(true);
     expect(byId(tree, 'session-finish')).toBeUndefined();
     expect(byId(tree, 'session-log-squat')).toBeUndefined();
+  });
+
+  it('tells the reminders the workout changed when the session is finished, but not when finishing fails', async () => {
+    mocked.complete.mockResolvedValueOnce({ kind: 'offline' });
+    mocked.complete.mockResolvedValueOnce({ kind: 'completed', summary, completedAt: 'x', repeated: false });
+    const tree = await mount();
+
+    await press(tree, 'session-finish');
+    expect(notifyWorkoutSetLogged).not.toHaveBeenCalled();
+    await press(tree, 'session-finish');
+
+    expect(notifyWorkoutSetLogged).toHaveBeenCalledWith('A');
   });
 
   it('explains nothing-logged and offline, and can be tried again', async () => {

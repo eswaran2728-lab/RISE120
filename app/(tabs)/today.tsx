@@ -8,6 +8,7 @@ import { useSession } from '../../src/auth/useSession';
 import { useLocalDate } from '../../src/lib/useLocalDate';
 import { JourneyArc } from '../../src/ui/JourneyArc';
 import { GuidedSessionCard } from '../../src/ui/GuidedSessionCard';
+import { loadGuidedProgress } from '../../src/workout/guidedProgress';
 import { ensurePlan } from '../../src/plan/ensurePlan';
 import { generatePlan } from '../../src/plan/generatePlan';
 import { loadPlanBundle } from '../../src/plan/planData';
@@ -72,7 +73,11 @@ function TodayScreen() {
       const lockedDay = day ? null : lockedPlanDay(bundle.plan, date, limitResult?.snapshot ?? null);
       setLocked(lockedDay === null ? null : { dayNumber: lockedDay, snapshot: limitResult?.snapshot ?? null, checkinDone: checkin !== null });
       if (day) {
-        setToday(deriveToday(day, sessionSets, checkin !== null));
+        // A guided session of this plan day counts as the day's workout by the same rules the reminders use. If it
+        // cannot be read, the regular workout alone decides.
+        const guided = day.workout.kind === 'workout' ? await loadGuidedProgress(userId, bundle.plan.id, day.dayNumber).catch(() => null) : null;
+        if (!alive()) return;
+        setToday(deriveToday(day, sessionSets, checkin !== null, guided));
         setWorkoutNames(
           day.workout.kind === 'workout'
             ? day.workout.exercises.map((e) => bundle.exercises.find((x) => x.id === e.exercise_id)?.name ?? '')
@@ -167,7 +172,7 @@ function TodayScreen() {
   }
 
   const rest = today.kind === 'rest';
-  const workoutFinished = !rest && today.plannedSets > 0 && today.completedSets >= today.plannedSets;
+  const workoutFinished = !rest && today.workoutComplete;
   const workoutStarted = !rest && today.completedSets > 0 && !workoutFinished;
   const workoutActionKey = workoutFinished ? 'today.viewWorkout' : workoutStarted ? 'today.resumeWorkout' : 'today.startWorkout';
   const setsText = t('today.setsProgress', { done: today.completedSets, total: today.plannedSets });

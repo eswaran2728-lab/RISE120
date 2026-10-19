@@ -91,6 +91,7 @@ export interface LoggedSet {
   setNumber: number;
   reps: number;
   weightKg: number;
+  sessionId?: string | null; // the started guided session this set belongs to; none for the regular workout
 }
 export interface SessionSet extends LoggedSet {
   pending: boolean;

@@ -13,6 +13,7 @@ import { supabaseTransport } from '../src/sync/supabaseTransport';
 import { loadExerciseLinks } from '../src/workout/availability';
 import { nextSetNumber, parseSetFields, queueWorkoutSet, SessionSet } from '../src/workout/log';
 import { pick } from '../src/workout/localise';
+import { notifyWorkoutSetLogged } from '../src/workout/events';
 import { loadSessionSets } from '../src/workout/session';
 import { completeSession, loadSessionExercises, SessionExercises } from '../src/workout/sessionActions';
 import type { SessionSummary } from '../src/workout/summary';
@@ -113,6 +114,7 @@ function SessionScreen() {
     if (result.kind === 'completed') {
       setSummary(result.summary);
       setMessage(null);
+      notifyWorkoutSetLogged(userId); // the day's workout changed: reminders re-read it
     } else if (result.kind === 'nothing_logged') {
       setMessage(t('exercise.nothingLogged'));
     } else if (result.kind === 'offline') {

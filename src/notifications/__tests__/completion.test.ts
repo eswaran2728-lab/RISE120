@@ -1,4 +1,5 @@
 import { isWorkoutComplete } from '../../today/selectors';
+import { loadGuidedProgress } from '../../workout/guidedProgress';
 import { workoutCompleteToday } from '../completion';
 import { loadPlanBundle } from '../../plan/planData';
 import { loadSessionSets } from '../../workout/session';
@@ -7,6 +8,7 @@ import type { PlanDay } from '../../plan/types';
 
 jest.mock('../../plan/planData', () => ({ loadPlanBundle: jest.fn() }));
 jest.mock('../../workout/session', () => ({ loadSessionSets: jest.fn() }));
+jest.mock('../../workout/guidedProgress', () => ({ loadGuidedProgress: jest.fn() }));
 
 const workoutDay: PlanDay = {
   dayNumber: 3,
@@ -48,7 +50,10 @@ describe('isWorkoutComplete', () => {
 
 describe('workoutCompleteToday', () => {
   const bundle = (days: PlanDay[]): PlanBundle => ({ plan: { id: 'p', startDate: '2026-10-16', status: 'active' }, days, exercises: [] } as unknown as PlanBundle);
-  beforeEach(() => jest.resetAllMocks());
+  beforeEach(() => {
+    jest.resetAllMocks();
+    (loadGuidedProgress as jest.Mock).mockResolvedValue(null);
+  });
 
   it('reads the plan and the sets for the date, including sets still waiting to sync', async () => {
     (loadPlanBundle as jest.Mock).mockResolvedValue(bundle([{ ...workoutDay, dayNumber: 3 }]));
@@ -79,3 +84,49 @@ describe('workoutCompleteToday', () => {
     expect(await workoutCompleteToday('u1', '2026-10-18')).toBe(false);
   });
 });
+
+describe('workoutCompleteToday with a guided session', () => {
+  const bundle = (days: PlanDay[]): PlanBundle => ({ plan: { id: 'plan-1', startDate: '2026-10-16', status: 'active' }, days, exercises: [] } as unknown as PlanBundle);
+  const guided = (status: 'active' | 'completed') => ({ sessionId: 'sess-1', status, planned: [{ exerciseId: 'g1', sets: 2 }] });
+  beforeEach(() => {
+    jest.resetAllMocks();
+    (loadPlanBundle as jest.Mock).mockResolvedValue(bundle([workoutDay]));
+    (loadSessionSets as jest.Mock).mockResolvedValue([]);
+    (loadGuidedProgress as jest.Mock).mockResolvedValue(null);
+  });
+
+  it('asks about the guided session of this account, plan and day', async () => {
+    await workoutCompleteToday('u1', '2026-10-18');
+
+    expect(loadGuidedProgress).toHaveBeenCalledWith('u1', 'plan-1', 3);
+  });
+
+  it('is true once the guided session was finished', async () => {
+    (loadGuidedProgress as jest.Mock).mockResolvedValue(guided('completed'));
+
+    expect(await workoutCompleteToday('u1', '2026-10-18')).toBe(true);
+  });
+
+  it('is true when every planned guided set is logged, including sets still waiting to sync', async () => {
+    (loadGuidedProgress as jest.Mock).mockResolvedValue(guided('active'));
+    (loadSessionSets as jest.Mock).mockResolvedValue([{ exerciseId: 'g1', sessionId: 'sess-1' }, { exerciseId: 'g1', sessionId: 'sess-1' }]);
+
+    expect(await workoutCompleteToday('u1', '2026-10-18')).toBe(true);
+  });
+
+  it('is false for a guided session that was only started, or has some of its sets', async () => {
+    (loadGuidedProgress as jest.Mock).mockResolvedValue(guided('active'));
+    expect(await workoutCompleteToday('u1', '2026-10-18')).toBe(false);
+
+    (loadSessionSets as jest.Mock).mockResolvedValue([{ exerciseId: 'g1', sessionId: 'sess-1' }]);
+    expect(await workoutCompleteToday('u1', '2026-10-18')).toBe(false);
+  });
+
+  it('still answers from the regular workout when the guided session cannot be read', async () => {
+    (loadGuidedProgress as jest.Mock).mockRejectedValue(new Error('offline'));
+    (loadSessionSets as jest.Mock).mockResolvedValue([{ exerciseId: 'a' }, { exerciseId: 'a' }, { exerciseId: 'b' }]);
+
+    expect(await workoutCompleteToday('u1', '2026-10-18')).toBe(true);
+  });
+});
+

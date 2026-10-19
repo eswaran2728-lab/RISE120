@@ -7,6 +7,7 @@ import * as catalogueData from '../catalogueData';
 import * as availability from '../availability';
 import * as sessionSets from '../session';
 import type { ExerciseVersion } from '../catalogue';
+import { notifyWorkoutSetLogged } from '../events';
 
 jest.setTimeout(30000);
 
@@ -20,6 +21,7 @@ jest.mock('../../auth/useSession', () => ({ useSession: () => ({ session: { user
 jest.mock('../../lib/useLocalDate', () => ({ useLocalDate: () => '2026-10-19' }));
 jest.mock('../../lib/supabase', () => ({ supabase: { from: jest.fn(), rpc: jest.fn(), functions: { invoke: jest.fn() } } }));
 jest.mock('../sessionActions', () => ({ loadSessionExercises: jest.fn(), swapRemainingExercise: jest.fn(), completeSession: jest.fn() }));
+jest.mock('../events', () => ({ notifyWorkoutSetLogged: jest.fn() }));
 jest.mock('../catalogueData', () => ({ loadExercises: jest.fn() }));
 jest.mock('../availability', () => ({ loadAvailability: jest.fn(), loadExerciseLinks: jest.fn() }));
 jest.mock('../session', () => ({ loadSessionSets: jest.fn() }));
@@ -208,6 +210,15 @@ describe('finishing the workout', () => {
     expect(shows(tree, t('exercise.summaryVolume', { count: 400 }))).toBe(true);
     expect(byId(tree, 'exercise-finish')).toBeUndefined();
     expect(byId(tree, 'swap-option-chair')).toBeUndefined();
+  });
+
+  it('tells the reminders the workout changed once it is finished', async () => {
+    mocked.complete.mockResolvedValue({ kind: 'completed', summary, completedAt: '2026-10-19T01:00:00Z', repeated: false });
+    const tree = await mount();
+
+    await press(tree, 'exercise-finish');
+
+    expect(notifyWorkoutSetLogged).toHaveBeenCalledWith('A');
   });
 
   it('shows the same summary when the workout turns out to be finished already', async () => {

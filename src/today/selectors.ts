@@ -1,6 +1,7 @@
 import { addLocalDays, dayNumberFor } from '../lib/dates';
 import type { LocalDate } from '../sync/types';
 import type { Plan, PlanDay } from '../plan/types';
+import type { GuidedProgress } from '../workout/guidedProgress';
 
 export const PLAN_LENGTH = 120;
 
@@ -22,17 +23,36 @@ export function planPhase(plan: Plan, localDate: LocalDate): PlanPhase {
 export interface TodayState {
   dayNumber: number;
   kind: 'rest' | 'workout';
+  // The sets shown: those of whichever path (regular plan or guided session) is further along.
   plannedSets: number;
   completedSets: number;
+  // The day's workout is done. One definition, shared by Today and the reminders: every planned set of the regular
+  // workout is logged, or the guided session was finished by the member or has every planned set logged.
+  workoutComplete: boolean;
   checkinDone: boolean;
   // 0..1. With a workout scheduled, the workout and the check-in are half each (workout
-  // progress is the share of planned sets done); on a rest day the check-in is all of it.
+  // progress is the share of the further-along path, never the sum of both); on a rest day the check-in is all of it.
   ringProgress: number;
   calorieTarget: number | null;
   proteinTargetG: number | null;
 }
 
-export function deriveToday(day: PlanDay, loggedSets: { exerciseId: string }[], checkinDone: boolean): TodayState {
+export type LoggedSetRef = { exerciseId: string; sessionId?: string | null };
+
+// Sets of the guided session that count towards its planned sets. Extra sets of one exercise never stand in for a
+// missing set of another.
+function guidedDone(guided: GuidedProgress, sets: LoggedSetRef[]): { planned: number; done: number } {
+  let planned = 0;
+  let done = 0;
+  for (const entry of guided.planned) {
+    const logged = sets.filter((set) => set.sessionId === guided.sessionId && set.exerciseId === entry.exerciseId).length;
+    planned += entry.sets;
+    done += Math.min(logged, entry.sets);
+  }
+  return { planned, done };
+}
+
+export function deriveToday(day: PlanDay, loggedSets: LoggedSetRef[], checkinDone: boolean, guided: GuidedProgress | null = null): TodayState {
   const base = {
     dayNumber: day.dayNumber,
     checkinDone,
@@ -40,20 +60,50 @@ export function deriveToday(day: PlanDay, loggedSets: { exerciseId: string }[], 
     proteinTargetG: day.proteinTargetG,
   };
   if (day.workout.kind === 'rest') {
-    return { ...base, kind: 'rest', plannedSets: 0, completedSets: 0, ringProgress: checkinDone ? 1 : 0 };
+    return { ...base, kind: 'rest', plannedSets: 0, completedSets: 0, workoutComplete: false, ringProgress: checkinDone ? 1 : 0 };
   }
 
-  // Extra sets beyond the plan, or sets of other exercises, do not count.
+  // The regular workout counts only sets logged outside a guided session, so a guided set of an exercise that is
+  // also in the plan is never counted twice. Extra sets, and sets of other exercises, do not count.
+  const regularSets = loggedSets.filter((set) => !set.sessionId);
   let plannedSets = 0;
   let completedSets = 0;
   for (const entry of day.workout.exercises) {
-    const logged = loggedSets.filter((set) => set.exerciseId === entry.exercise_id).length;
+    const logged = regularSets.filter((set) => set.exerciseId === entry.exercise_id).length;
     plannedSets += entry.sets;
     completedSets += Math.min(logged, entry.sets);
   }
-  const workoutShare = plannedSets === 0 ? 0 : completedSets / plannedSets;
-  const ringProgress = 0.5 * workoutShare + (checkinDone ? 0.5 : 0);
-  return { ...base, kind: 'workout', plannedSets, completedSets, ringProgress };
+  const regularShare = plannedSets === 0 ? 0 : completedSets / plannedSets;
+  const regularComplete = plannedSets > 0 && completedSets >= plannedSets;
+
+  let shown = { planned: plannedSets, done: completedSets };
+  let share = regularShare;
+  let guidedComplete = false;
+  if (guided) {
+    const g = guidedDone(guided, loggedSets);
+    const guidedShare = g.planned === 0 ? 0 : g.done / g.planned;
+    guidedComplete = guided.status === 'completed' || (g.planned > 0 && g.done >= g.planned);
+    if (guidedShare > regularShare) {
+      shown = { planned: g.planned, done: g.done };
+      share = guidedShare;
+    }
+  }
+
+  const workoutComplete = regularComplete || guidedComplete;
+  const workoutShare = workoutComplete ? 1 : share;
+  return {
+    ...base,
+    kind: 'workout',
+    plannedSets: shown.planned,
+    completedSets: shown.done,
+    workoutComplete,
+    ringProgress: 0.5 * workoutShare + (checkinDone ? 0.5 : 0),
+  };
+}
+
+// Whether the day's workout is done, by the same rules as deriveToday.
+export function isWorkoutComplete(day: PlanDay, loggedSets: LoggedSetRef[], guided: GuidedProgress | null = null): boolean {
+  return deriveToday(day, loggedSets, false, guided).workoutComplete;
 }
 
 // Consecutive local calendar days with a check-in. Today not being checked in yet does not
@@ -67,11 +117,4 @@ export function checkinStreak(checkinDates: LocalDate[], localDate: LocalDate): 
     cursor = addLocalDays(cursor, -1);
   }
   return streak;
-}
-
-// A workout day is complete only when every planned set is logged. One set is not the workout; extra sets of one
-// exercise do not stand in for another; a rest day has no workout to finish.
-export function isWorkoutComplete(day: PlanDay, loggedSets: { exerciseId: string }[]): boolean {
-  const state = deriveToday(day, loggedSets, false);
-  return state.kind === 'workout' && state.plannedSets > 0 && state.completedSets >= state.plannedSets;
 }

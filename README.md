@@ -275,8 +275,14 @@ switch on quiet hours (9 pm to 7 am). The text is generic and says nothing about
   `start-session`, and opens `app/session.tsx` (exercises, sets done out of planned, logging sets, finishing once).
   Each exercise opens `app/exercise.tsx` (cues, video on request, swap). The card says "not available yet" when the
   published catalogue is empty or the exercises are not linked, and offers only sessions whose every exercise is linked.
-- **Not connected:** sets logged in a guided session are tied to the session but do not move the plan-day ring on Today,
-  which still counts the regular workout. The rest timer and the progression proposals are not in the guided screens.
+- **Progress today:** one definition of "the day's workout is done" (`isWorkoutComplete`), used by Today and the
+  reminders: every planned set of the regular workout is logged, or the guided session was finished by the member or
+  has every planned set logged. A session that was only started counts for nothing. The ring takes the further-along
+  path, never the sum, and regular progress ignores sets logged inside a guided session, so doing both cannot count
+  the day twice. The guided session is read per account, plan and day and remembered on the phone for offline;
+  pending sets count. Progress and the cycle review count days with any logged set (participation), whichever way it
+  was logged, which is deliberately wider.
+- **Not connected:** the guided screens have no rest timer or progression proposals yet.
 - **Sets in a session:** the offline queue carries an optional `sessionId`; `exercise_links` (empty until content is
   linked) maps each catalogue exercise to the exercise that logged sets use.
 

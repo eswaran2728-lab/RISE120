@@ -11,6 +11,7 @@ import { useLocalDate } from '../src/lib/useLocalDate';
 import type { ExerciseVersion } from '../src/workout/catalogue';
 import { loadExercises } from '../src/workout/catalogueData';
 import { loadAvailability, loadExerciseLinks } from '../src/workout/availability';
+import { notifyWorkoutSetLogged } from '../src/workout/events';
 import { loadSessionSets } from '../src/workout/session';
 import { completeSession, loadSessionExercises, swapRemainingExercise, SessionExercise, SessionExercises } from '../src/workout/sessionActions';
 import { eligibleSwaps, Availability } from '../src/workout/swaps';
@@ -133,6 +134,7 @@ function ExerciseScreen() {
     if (result.kind === 'completed') {
       setSummary(result.summary);
       setMessage(null);
+      if (userId) notifyWorkoutSetLogged(userId); // the day's workout changed: reminders re-read it
     } else if (result.kind === 'nothing_logged') {
       setMessage(t('exercise.nothingLogged'));
     } else if (result.kind === 'offline') {

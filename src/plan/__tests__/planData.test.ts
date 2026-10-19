@@ -42,7 +42,12 @@ describe('plan row mappers', () => {
       setNumber: 2,
       reps: 8,
       weightKg: 22.5,
+      sessionId: null,
     });
+  });
+
+  it('keeps which started session a set belongs to, so guided and regular sets can be told apart', () => {
+    expect(mapLoggedSet({ id: 's1', exercise_id: 'e1', set_number: 1, reps: 8, weight_kg: 20, session_id: 'sess-1' })).toMatchObject({ sessionId: 'sess-1' });
   });
 });
 

@@ -24,7 +24,7 @@ export async function loadSessionSets(userId: string, date: LocalDate): Promise<
 
   const pending = (await listPending(userId)).flatMap((op) =>
     op.kind === 'workout_set' && op.date === date
-      ? [{ id: op.id, exerciseId: op.exerciseId, setNumber: op.setNumber, reps: op.reps, weightKg: op.weightKg }]
+      ? [{ id: op.id, exerciseId: op.exerciseId, setNumber: op.setNumber, reps: op.reps, weightKg: op.weightKg, sessionId: op.sessionId ?? null }]
       : []
   );
   return mergeSets(synced, pending);

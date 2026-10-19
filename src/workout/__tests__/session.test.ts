@@ -28,6 +28,16 @@ describe('loadSessionSets', () => {
     expect(sets.map((s) => [s.id, s.pending])).toEqual([['a1', false], ['a2', true]]);
   });
 
+  it('keeps the session a set belongs to, for synced and pending sets alike', async () => {
+    (loadLoggedSets as jest.Mock).mockResolvedValue([{ ...synced('a1', 'A', 1), sessionId: 'sess-1' }, { ...synced('a2', 'A', 2), sessionId: null }]);
+    await enqueue('u1', { kind: 'workout_set', id: 'a3', date: '2026-10-13', exerciseId: 'A', setNumber: 3, reps: 8, weightKg: 20, sessionId: 'sess-1', updatedAt: 1 });
+    await enqueue('u1', { kind: 'workout_set', id: 'a4', date: '2026-10-13', exerciseId: 'A', setNumber: 4, reps: 8, weightKg: 20, updatedAt: 1 });
+
+    const sets = await loadSessionSets('u1', '2026-10-13');
+
+    expect(sets.map((s) => [s.id, s.sessionId ?? null])).toEqual([['a1', 'sess-1'], ['a2', null], ['a3', 'sess-1'], ['a4', null]]);
+  });
+
   it('does not restart set numbers when the server cannot be read (no overwrite of synced sets)', async () => {
     (loadLoggedSets as jest.Mock).mockResolvedValueOnce([synced('a1', 'A', 1), synced('a2', 'A', 2)]);
     await loadSessionSets('u1', '2026-10-13'); // online: remembers the synced sets

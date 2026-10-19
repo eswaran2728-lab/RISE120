@@ -34,6 +34,7 @@ export const mapLoggedSet = (row: Row): LoggedSet => ({
   setNumber: row.set_number,
   reps: row.reps,
   weightKg: Number(row.weight_kg),
+  sessionId: typeof row.session_id === 'string' ? row.session_id : null,
 });
 
 export interface PlanBundle {
@@ -99,7 +100,7 @@ export async function refreshPlanBundle(userId: string): Promise<PlanBundle | nu
 export async function loadLoggedSets(userId: string, date: string): Promise<LoggedSet[]> {
   const { data, error } = await supabase
     .from('workout_logs')
-    .select('id, exercise_id, set_number, reps, weight_kg')
+    .select('id, exercise_id, set_number, reps, weight_kg, session_id')
     .eq('user_id', userId)
     .eq('log_date', date);
   if (error) throw new Error(error.message);

@@ -16,6 +16,17 @@ describe('participation', () => {
     expect(summary.participation).toEqual({ workoutDays: 2, checkinDays: 2 });
   });
 
+  // Progress counts days with at least one logged set (participation), whichever way the sets were logged. This is
+  // deliberately wider than Today, which asks for the whole workout to be done; the ring and reminders use that.
+  it('counts a day once when sets were logged both in a guided session and in the regular workout', () => {
+    const summary = summariseWeek({
+      ...base,
+      logs: [log('regular-1', '2026-10-14', 'bench'), log('guided-1', '2026-10-14', 'squat'), log('guided-2', '2026-10-14', 'squat'), log('guided-3', '2026-10-15', 'squat')],
+    });
+
+    expect(summary.participation.workoutDays).toBe(2);
+  });
+
   describe('time boundaries', () => {
     it('includes the first and last day of the window and nothing on either side', () => {
       const summary = summariseWeek({
