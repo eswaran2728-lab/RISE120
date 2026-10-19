@@ -304,3 +304,161 @@ describe('what the planner reads', () => {
     expect(mocked.limits).toHaveBeenCalledWith('A');
   });
 });
+
+describe('reopening a saved plan', () => {
+  const sel = (recipeId: string, day: number, slot: number, servings = 1, version = 1) => ({ recipeId, version, servings, day, slot });
+  const savedPlan = (selections = [sel('a', 0, 0, 1.5), sel('b', 0, 1), sel('c', 1, 0, 2)], revision = 3) => ({ kind: 'plan', revision, selections });
+  const mealLines = (tree: ReactTestRenderer) => textsOf(tree).filter((s) => s.includes(': '));
+
+  it('shows the saved selections and their revision, not a new suggestion', async () => {
+    mocked.saved.mockResolvedValue(savedPlan());
+    const tree = await mount();
+
+    expect(shows(tree, t('planner.savedPlanTitle', { revision: 3 }))).toBe(true);
+    expect(mealLines(tree).some((s) => s.endsWith(': a'))).toBe(true);
+    expect(shows(tree, t('planner.servings', { count: 1.5 }))).toBe(true);
+    expect(shows(tree, t('planner.dayN', { count: 2 }))).toBe(true);
+    expect(shows(tree, t('planner.candidate'))).toBe(false);
+  });
+
+  it('shows the same plan when preferences or the recipe order change', async () => {
+    mocked.saved.mockResolvedValue(savedPlan());
+    mocked.recipes.mockResolvedValue([noCook('c'), noCook('b'), noCook('a')]);
+    const tree = await mount();
+    const before = mealLines(tree);
+    await act(async () => {
+      await byId(tree, 'planner-diet-vegan')!.props.onPress(); // no recipe is vegan: a new suggestion would be empty
+    });
+
+    expect(shows(tree, t('planner.savedPlanTitle', { revision: 3 }))).toBe(true);
+    expect(mealLines(tree)).toEqual(before);
+    expect(before[0].endsWith(': a')).toBe(true);
+    expect(before[1].endsWith(': b')).toBe(true);
+  });
+
+  it('never replaces the saved plan by itself: a new suggestion is an explicit action, and saving it is another', async () => {
+    mocked.saved.mockResolvedValue(savedPlan());
+    const tree = await mount();
+    expect(mocked.save).not.toHaveBeenCalled();
+    expect(has(tree, 'planner-save')).toBe(false);
+
+    await press(tree, 'planner-new-suggestion');
+
+    expect(shows(tree, t('planner.candidate'))).toBe(true);
+    expect(mocked.save).not.toHaveBeenCalled();
+    await press(tree, 'planner-back-to-saved');
+    expect(shows(tree, t('planner.savedPlanTitle', { revision: 3 }))).toBe(true);
+    expect(has(tree, 'planner-save')).toBe(false);
+  });
+
+  it('saves a chosen new suggestion against the saved revision with a request id', async () => {
+    mocked.saved.mockResolvedValue(savedPlan());
+    const tree = await mount();
+    await press(tree, 'planner-new-suggestion');
+
+    await press(tree, 'planner-save');
+
+    expect(mocked.save).toHaveBeenCalledWith(expect.objectContaining({ expectedRevision: 3, requestId: expect.stringMatching(/^[0-9a-f-]{36}$/) }));
+    expect(shows(tree, t('planner.saved', { revision: 1 }))).toBe(true);
+  });
+
+  it('explains a saved recipe version that is no longer available, and offers replace or remove instead of a save', async () => {
+    mocked.saved.mockResolvedValue(savedPlan([sel('a', 0, 0), sel('ghost', 0, 1), sel('c', 1, 0)]));
+    const tree = await mount();
+
+    expect(shows(tree, t('planner.unavailableMeal'))).toBe(true);
+    expect(has(tree, 'planner-save')).toBe(false);
+    expect(has(tree, 'planner-replace-0-1')).toBe(true);
+    expect(has(tree, 'planner-remove-0-1')).toBe(true);
+  });
+
+  it('replaces an unavailable meal with an eligible recipe, keeps its servings, and saves the edit against the saved revision', async () => {
+    mocked.saved.mockResolvedValue(savedPlan([sel('a', 0, 0), sel('ghost', 0, 1, 2), sel('c', 1, 0)]));
+    const tree = await mount();
+
+    await press(tree, 'planner-replace-0-1');
+    expect(shows(tree, t('planner.unavailableMeal'))).toBe(false);
+    await press(tree, 'planner-save');
+
+    const sent = mocked.save.mock.calls[0][0];
+    expect(sent.expectedRevision).toBe(3);
+    expect(sent.selections).toHaveLength(3);
+    expect(sent.selections.some((s: { recipeId: string }) => s.recipeId === 'ghost')).toBe(false);
+    expect(sent.selections.find((s: { day: number; slot: number }) => s.day === 0 && s.slot === 1).servings).toBe(2);
+  });
+
+  it('can remove an unavailable meal, and a retry after a lost answer reuses the request id', async () => {
+    mocked.saved.mockResolvedValue(savedPlan([sel('a', 0, 0), sel('ghost', 0, 1)]));
+    mocked.save.mockResolvedValueOnce({ kind: 'offline' });
+    mocked.save.mockResolvedValueOnce({ kind: 'saved', revision: 4, repeated: true });
+    const tree = await mount();
+
+    await press(tree, 'planner-remove-0-1');
+    await press(tree, 'planner-save');
+    expect(shows(tree, t('planner.saveOffline'))).toBe(true);
+    await press(tree, 'planner-save');
+
+    const [first, second] = mocked.save.mock.calls.map((c) => c[0]);
+    expect(second.requestId).toBe(first.requestId);
+    expect(first.selections.map((s: { recipeId: string }) => s.recipeId)).toEqual(['a']);
+    expect(shows(tree, t('planner.savedPlanTitle', { revision: 4 }))).toBe(true);
+  });
+
+  it('says so when nothing eligible can replace a meal, and keeps the saved plan', async () => {
+    mocked.saved.mockResolvedValue(savedPlan([sel('ghost', 0, 0)]));
+    mocked.recipes.mockResolvedValue([recipe('stove-only')]); // needs a cooker the member does not have
+
+    const tree = await mount();
+    await press(tree, 'planner-replace-0-0');
+
+    expect(shows(tree, t('planner.noReplacement'))).toBe(true);
+    expect(shows(tree, t('planner.unavailableMeal'))).toBe(true);
+  });
+
+  it('lets a free member see the saved plan, and offers Premium rather than Save for an edit', async () => {
+    mocked.limits.mockResolvedValue(premiumSnapshot(false));
+    mocked.saved.mockResolvedValue(savedPlan([sel('a', 0, 0), sel('ghost', 0, 1)]));
+    const tree = await mount();
+    expect(shows(tree, t('planner.savedPlanTitle', { revision: 3 }))).toBe(true);
+
+    await press(tree, 'planner-remove-0-1');
+
+    expect(has(tree, 'planner-save')).toBe(false);
+    expect(has(tree, 'planner-upgrade')).toBe(true);
+  });
+
+  it('reloads the saved plan and drops the edit when the server says it is stale', async () => {
+    mocked.saved.mockResolvedValue(savedPlan([sel('a', 0, 0), sel('ghost', 0, 1)]));
+    mocked.save.mockResolvedValue({ kind: 'stale', revision: 5 });
+    const tree = await mount();
+    await press(tree, 'planner-remove-0-1');
+    mocked.saved.mockResolvedValue(savedPlan([sel('b', 0, 0)], 5));
+
+    await press(tree, 'planner-save');
+
+    expect(shows(tree, t('planner.stale'))).toBe(true);
+    expect(shows(tree, t('planner.savedPlanTitle', { revision: 5 }))).toBe(true);
+    expect(has(tree, 'planner-save')).toBe(false);
+  });
+
+  it('does not offer to overwrite a plan it could not read', async () => {
+    mocked.saved.mockResolvedValue({ kind: 'unreadable' });
+    const tree = await mount();
+
+    expect(shows(tree, t('planner.savedUnreadable'))).toBe(true);
+    expect(has(tree, 'planner-save')).toBe(false);
+    expect(has(tree, 'planner-retry-saved')).toBe(true);
+  });
+
+  it('logs a saved meal for today only after confirmation', async () => {
+    mocked.saved.mockResolvedValue(savedPlan());
+    const tree = await mount();
+
+    await press(tree, 'planner-log-0-0');
+    expect(mocked.log).not.toHaveBeenCalled();
+    await press(tree, 'planner-log-confirm-0-0');
+
+    expect(mocked.log).toHaveBeenCalledWith('A', '2026-10-19', expect.objectContaining({ confirmed: true, servings: 1.5, slotKey: '0:0' }));
+    expect(has(tree, 'planner-log-1-0')).toBe(false); // only today's meals
+  });
+});

@@ -85,6 +85,11 @@ function bestServings(recipe: Recipe, slotCalories: number | null): number {
   return best;
 }
 
+// The recipes a new suggestion could use, in a fixed order (id, then version); used to offer a replacement for a meal.
+export function eligibleRecipes(prefs: Preferences, recipes: Recipe[], targets: Targets): Recipe[] {
+  return [...recipes].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : a.version - b.version)).filter((recipe) => exclusionReason(recipe, prefs, targets) === null);
+}
+
 export function selectMeals(prefs: Preferences, recipes: Recipe[], targets: Targets): MealPlan {
   if (!Number.isInteger(prefs.days) || prefs.days < 1 || prefs.days > 7) throw new Error('Plan days must be a whole number from 1 to 7');
   if (!Number.isInteger(prefs.mealsPerDay) || prefs.mealsPerDay < 1 || prefs.mealsPerDay > 6) throw new Error('Meals per day must be a whole number from 1 to 6');

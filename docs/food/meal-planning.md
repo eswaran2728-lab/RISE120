@@ -22,6 +22,14 @@
 
 Saving is **premium only, decided on database time** (a lapsed subscription is refused even if the tier still says premium). An edit names the revision it was made against (0 for the first save); a different current revision is refused with the current one, so two phones cannot overwrite each other, and two simultaneous saves give one winner. A repeat of the same request id returns the original result and writes nothing. A selection may only point at a **published, shared (reviewed)** recipe version; drafts, in-review, missing and other members' private recipes are refused. Members can read only their own plan and never write the table directly. Saving never creates a food log.
 
+## Reopening a saved plan
+
+Opening Food, then Meal Planner, shows the plan the member saved, with its revision, exactly as saved. It does not depend on current preferences or on the order recipes arrive in, and it never changes by itself.
+
+- **Suggest a new plan** is an explicit action. A new suggestion is saved only by a separate Save, against the revision the member saw (stale revisions are still refused by the server), with a request id that is reused on retry. "Back to my saved plan" returns without saving anything.
+- A saved recipe version that is no longer available is shown with a plain explanation, **Replace** (with an eligible reviewed recipe, same servings) or **Remove**. Edits are a draft until saved; Save is offered only when every meal is available. A free member sees the saved plan and is offered Premium for edits (the server still enforces it).
+- If the saved plan cannot be read, the screen says so, offers Try again and does not offer to overwrite it.
+
 ## Logging a planned meal
 
 Choosing a recipe logs nothing. The member presses Log, is asked to confirm, and only then is the meal logged through the existing food-log queue with a **stable id** (account, day, meal, recipe and slot), so a double tap, a retry or a replay is one log, and an edited portion updates that log. Logging is offered for today's meals only. The recipe is logged as the member's private food (`source = recipe`, unverified) holding its per-serving values; a recipe with any unknown core value cannot be logged (a log needs real numbers, never zeros). The first log of a recipe version needs a connection to create that food; afterwards it works offline from the phone's remembered foods.
