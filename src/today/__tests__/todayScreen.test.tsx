@@ -30,6 +30,10 @@ jest.mock('../../checkin/load', () => ({ loadCheckin: jest.fn() }));
 jest.mock('../load', () => ({ loadCheckinDates: jest.fn() }));
 jest.mock('../../workout/session', () => ({ loadSessionSets: jest.fn() }));
 jest.mock('../../monetization/limits', () => ({ ...jest.requireActual('../../monetization/limits'), loadLimitsOrCached: jest.fn() }));
+jest.mock('../../ui/GuidedSessionCard', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  GuidedSessionCard: (props: Record<string, unknown>) => require('react').createElement('GuidedSessionCardStub', { testID: 'guided-card', ...props }),
+}));
 jest.mock('../../monetization/useUnlock', () => ({ useUnlock: jest.fn() }));
 
 const mocked = {
@@ -303,3 +307,20 @@ describe('languages', () => {
     expect(shows(tree, 'Start workout')).toBe(false);
   });
 });
+
+describe('the guided session entry point', () => {
+  it('offers the guided session on a workout day, for this plan and day, next to the regular workout', async () => {
+    const tree = await show();
+
+    const card = tree.root.findAll((n) => (n.type as unknown) === 'GuidedSessionCardStub')[0];
+    expect(card.props).toMatchObject({ userId: 'A', planId: 'p', dayNumber: 18 });
+    expect(count(tree, 'today-primary-action')).toBe(1); // the regular workout is still there
+  });
+
+  it('does not offer a guided session on a rest day', async () => {
+    const tree = await show({ day: restDay() });
+
+    expect(tree.root.findAll((n) => (n.type as unknown) === 'GuidedSessionCardStub')).toHaveLength(0);
+  });
+});
+

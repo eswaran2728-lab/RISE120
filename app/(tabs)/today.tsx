@@ -7,6 +7,7 @@ import { tokens } from '../../src/theme/tokens';
 import { useSession } from '../../src/auth/useSession';
 import { useLocalDate } from '../../src/lib/useLocalDate';
 import { JourneyArc } from '../../src/ui/JourneyArc';
+import { GuidedSessionCard } from '../../src/ui/GuidedSessionCard';
 import { ensurePlan } from '../../src/plan/ensurePlan';
 import { generatePlan } from '../../src/plan/generatePlan';
 import { loadPlanBundle } from '../../src/plan/planData';
@@ -32,6 +33,7 @@ function TodayScreen() {
   const [streak, setStreak] = useState(0);
   const [workoutNames, setWorkoutNames] = useState<string[]>([]);
   const [planComplete, setPlanComplete] = useState(false);
+  const [planId, setPlanId] = useState<string | null>(null);
   // Set when today's plan day lies past what the server lets this account open (the free plan days).
   const [locked, setLocked] = useState<{ dayNumber: number; snapshot: LimitSnapshot | null; checkinDone: boolean } | null>(null);
   const mounted = useRef(true);
@@ -57,6 +59,7 @@ function TodayScreen() {
       }
 
       setPlanComplete(planPhase(bundle.plan, date) === 'complete');
+      setPlanId(bundle.plan.id);
       const day = getPlanDay(bundle.plan, bundle.days, date);
       const sessionSets = await loadSessionSets(userId, date);
       const checkin = await loadCheckin(userId, date);
@@ -210,6 +213,8 @@ function TodayScreen() {
             <Text style={styles.sessionButtonText}>{rest ? checkinText : t(workoutActionKey)}</Text>
           </TouchableOpacity>
         </View>
+
+        {!rest && planId && userId ? <GuidedSessionCard userId={userId} planId={planId} dayNumber={today.dayNumber} /> : null}
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t('today.stepsTitle')}</Text>

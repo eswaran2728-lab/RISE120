@@ -1,7 +1,7 @@
 import { mockStore } from '../../sync/testing/storageMock';
 import { clearUserCache } from '../../cache/userCache';
 import { supabase } from '../../lib/supabase';
-import { loadExercises } from '../catalogueData';
+import { loadExercises, loadSessionTemplates } from '../catalogueData';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
@@ -66,3 +66,35 @@ describe('loadExercises', () => {
     expect((await loadExercises('A')).map((e) => e.id)).toEqual(['squat']);
   });
 });
+
+const template = (id: string, version: number, over: Record<string, unknown> = {}) => ({
+  id, version, goal: 'recomp', level: 'beginner', minutes: 20, location: 'home', day_type: 'training', exercises: [{ exerciseId: 'squat', sets: 3, reps: 10 }], reviewer: { name: 'A', role: 'Coach', reviewedOn: '2026-10-10' }, status: 'published', ...over,
+});
+
+describe('loadSessionTemplates', () => {
+  it('reads only published templates, keeps the newest version, and maps the database names', async () => {
+    const query = answer([template('easy', 1), template('easy', 2, { minutes: 30 }), template('hard', 1, { day_type: 'recovery' })]);
+
+    const sessions = await loadSessionTemplates('A');
+
+    expect(query.eq).toHaveBeenCalledWith('status', 'published');
+    expect(sessions.map((s) => [s.id, s.version, s.minutes, s.dayType]).sort()).toEqual([['easy', 2, 30, 'training'], ['hard', 1, 20, 'recovery']]);
+    expect(sessions[0].exercises).toEqual([{ exerciseId: 'squat', sets: 3, reps: 10 }]);
+  });
+
+  it('remembers what it read for offline, per account, and is empty when nothing was ever read', async () => {
+    answer([template('easy', 1)]);
+    await loadSessionTemplates('A');
+    answer(null, { message: 'offline' });
+
+    expect((await loadSessionTemplates('A')).map((s) => s.id)).toEqual(['easy']);
+    expect(await loadSessionTemplates('B')).toEqual([]);
+  });
+
+  it('skips templates that are not the expected shape', async () => {
+    answer([template('easy', 1), template('odd', 1, { exercises: 'none' }), { id: 'x' }]);
+
+    expect((await loadSessionTemplates('A')).map((s) => s.id)).toEqual(['easy']);
+  });
+});
+

@@ -270,8 +270,13 @@ switch on quiet hours (9 pm to 7 am). The text is generic and says nothing about
   taps at once, return the same summary and finish time. A session with nothing logged cannot be finished.
 - **Demonstration:** the written cues always show. A video opens only when the person taps, only from an https link;
   if it cannot open, or there is none, the cues stay and a note says why. The catalogue is kept on the phone for offline.
-- **Entry point:** `app/exercise.tsx` takes `sessionId` and `exerciseId`. Nothing links to it yet: the screens that
-  choose and start a session (rest of C2) are not built, so no session exists to open from the Workout tab.
+- **Entry points:** Today and the Workout tab show a Guided session card on workout days, next to the regular workout,
+  which is unchanged. The card chooses (time and energy, then `selectSession`), starts or resumes through
+  `start-session`, and opens `app/session.tsx` (exercises, sets done out of planned, logging sets, finishing once).
+  Each exercise opens `app/exercise.tsx` (cues, video on request, swap). The card says "not available yet" when the
+  published catalogue is empty or the exercises are not linked, and offers only sessions whose every exercise is linked.
+- **Not connected:** sets logged in a guided session are tied to the session but do not move the plan-day ring on Today,
+  which still counts the regular workout. The rest timer and the progression proposals are not in the guided screens.
 - **Sets in a session:** the offline queue carries an optional `sessionId`; `exercise_links` (empty until content is
   linked) maps each catalogue exercise to the exercise that logged sets use.
 

@@ -15,6 +15,7 @@ import { flushPending } from '../../src/sync/flush';
 import { supabaseTransport } from '../../src/sync/supabaseTransport';
 import { loadSessionSets } from '../../src/workout/session';
 import { LimitNotice } from '../../src/ui/LimitNotice';
+import { GuidedSessionCard } from '../../src/ui/GuidedSessionCard';
 import { useUnlock } from '../../src/monetization/useUnlock';
 import { LimitSnapshot, loadLimitsOrCached, lockedPlanDay, unlockActions } from '../../src/monetization/limits';
 import {
@@ -183,6 +184,8 @@ function WorkoutScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>{t('workout.title')}</Text>
+
+      {userId ? <GuidedSessionCard userId={userId} planId={bundle.plan.id} dayNumber={day.dayNumber} /> : null}
 
       {rest ? (
         <View style={styles.restBox}>
