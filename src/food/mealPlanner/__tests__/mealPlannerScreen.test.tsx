@@ -267,15 +267,13 @@ describe('logging a planned meal', () => {
     expect(shows(tree, t('planner.logged'))).toBe(true);
   });
 
-  it('explains when it cannot log: no connection the first time, or nutrition that is incomplete', async () => {
-    mocked.log.mockResolvedValueOnce({ kind: 'offline' });
+  it('explains when it cannot log because the nutrition is incomplete', async () => {
     mocked.log.mockResolvedValueOnce({ kind: 'nutrition_unknown' });
     const tree = await mount();
 
     await press(tree, 'planner-log-0-0');
     await press(tree, 'planner-log-confirm-0-0');
-    expect(shows(tree, t('planner.logOffline'))).toBe(true);
-    await press(tree, 'planner-log-confirm-0-0');
+
     expect(shows(tree, t('planner.logNutritionUnknown'))).toBe(true);
   });
 

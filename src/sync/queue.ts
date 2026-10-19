@@ -33,6 +33,7 @@ async function write(userId: string, operations: PendingOperation[]): Promise<vo
 export const operationKey = (op: PendingOperation): string => {
   if (op.kind === 'workout_set') return `set:${op.id}`;
   if (op.kind === 'food_log') return `food:${op.id}`;
+  if (op.kind === 'recipe_food') return `recipefood:${op.id}`;
   return `checkin:${op.date}`;
 };
 
@@ -93,6 +94,22 @@ export function clearPhotoUri(userId: string, date: string, uri: string): Promis
       if (op.kind === 'checkin' && op.date === date && op.photoUri === uri) {
         changed = true;
         return { ...op, photoUri: null };
+      }
+      return op;
+    });
+    if (changed) await write(userId, operations);
+  });
+}
+
+// The server already held a food for this recipe version under another id: point the queued logs at it. Edit times
+// are left alone, so a flush in progress still recognises the entries it is sending.
+export function remapFoodId(userId: string, from: string, to: string): Promise<void> {
+  return withLock(userId, async () => {
+    let changed = false;
+    const operations = (await read(userId)).map((op) => {
+      if (op.kind === 'food_log' && op.foodId === from) {
+        changed = true;
+        return { ...op, foodId: to, food: op.food ? { ...op.food, id: to } : op.food };
       }
       return op;
     });

@@ -2,7 +2,7 @@ import { mockStore } from '../testing/storageMock';
 import { enqueue, listPending } from '../queue';
 import { flushPending } from '../flush';
 import { QuotaLimitError } from '../../monetization/errors';
-import type { CheckinOperation, FoodLogOperation, SyncTransport, WorkoutSetOperation } from '../types';
+import type { CheckinOperation, FoodLogOperation, RecipeFoodOperation, SyncTransport, WorkoutSetOperation } from '../types';
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
@@ -57,6 +57,10 @@ function fakeServer() {
     upsertCheckin: jest.fn(async (userId, op) => {
       calls.push(`checkin:${userId}:${op.date}`);
       checkins.set(`${userId}:${op.date}`, op);
+    }),
+    upsertRecipeFood: jest.fn(async (userId, op) => {
+      calls.push(`recipe-food:${userId}:${op.id}`);
+      return op.id;
     }),
     upsertFoodLog: jest.fn(async (userId, op) => {
       calls.push(`food:${userId}:${op.id}`);
@@ -268,6 +272,7 @@ describe('flushPending with the daily food limit', () => {
     const transport: SyncTransport = {
       upsertWorkoutSet: jest.fn(async (userId, op) => void state.sets.add(`${userId}:${op.id}`)),
       upsertCheckin: jest.fn(async (userId, op) => void state.checkins.add(`${userId}:${op.date}`)),
+      upsertRecipeFood: jest.fn(async (_userId, op) => op.id),
       upsertFoodLog: jest.fn(async (userId, op) => {
         const key = `${userId}:${op.id}`;
         if (!state.accepted.has(key)) {
@@ -427,5 +432,91 @@ describe('flushPending with the daily food limit', () => {
     expect(await flushPending('B', server.transport)).toEqual({ synced: 1, failed: 0, remaining: 0 });
     expect(await listPending('A')).toHaveLength(1);
     expect((await listPending('A'))[0]).toMatchObject({ blocked: { kind: 'limit' } });
+  });
+});
+
+// A recipe never logged before is created as the member's private food first; its log follows.
+describe('flushPending with a recipe food', () => {
+  beforeEach(() => mockStore.clear());
+  const recipeFoodOp = (id = 'rf-1', over: Partial<RecipeFoodOperation> = {}): RecipeFoodOperation => ({
+    kind: 'recipe_food',
+    id,
+    food: { id, userId: 'A', name: 'Bowl', aliases: {}, servingDesc: '1 serving of Bowl', calories: 500, proteinG: 25, carbsG: 60, fatG: 14, source: 'recipe', verified: false, region: 'MY', sourceId: 'bowl@1', barcode: null },
+    updatedAt: 1000,
+    ...over,
+  });
+
+  it('creates the food before the log, even when the log was queued first', async () => {
+    const server = fakeServer();
+    await enqueue('A', foodLog('l1', { foodId: 'rf-1' }));
+    await enqueue('A', recipeFoodOp());
+
+    const result = await flushPending('A', server.transport);
+
+    expect(server.calls).toEqual(['recipe-food:A:rf-1', 'food:A:l1']);
+    expect(result).toEqual({ synced: 2, failed: 0, remaining: 0 });
+  });
+
+  it('keeps the log queued, without sending it, while its food could not be created, and sends both on the next flush', async () => {
+    const server = fakeServer();
+    (server.transport.upsertRecipeFood as jest.Mock).mockRejectedValueOnce(new Error('Network request failed'));
+    await enqueue('A', recipeFoodOp());
+    await enqueue('A', foodLog('l1', { foodId: 'rf-1' }));
+    await enqueue('A', foodLog('l2', { foodId: 'other-food' }));
+
+    const first = await flushPending('A', server.transport);
+
+    expect(server.calls).toEqual(['food:A:l2']); // the unrelated log still syncs
+    expect(first.remaining).toBe(2);
+    const second = await flushPending('A', server.transport);
+    expect(server.calls).toEqual(['food:A:l2', 'recipe-food:A:rf-1', 'food:A:l1']);
+    expect(second.remaining).toBe(0);
+  });
+
+  it('makes one food and one log when the response to the food is lost and the flush is retried', async () => {
+    const created = new Set<string>();
+    const server = fakeServer();
+    let lost = true;
+    (server.transport.upsertRecipeFood as jest.Mock).mockImplementation(async (_userId: string, op: RecipeFoodOperation) => {
+      created.add(op.id);
+      if (lost) {
+        lost = false;
+        throw new Error('Network request failed'); // stored, but the answer never arrived
+      }
+      return op.id;
+    });
+    await enqueue('A', recipeFoodOp());
+    await enqueue('A', foodLog('l1', { foodId: 'rf-1' }));
+
+    await flushPending('A', server.transport);
+    await flushPending('A', server.transport);
+    await flushPending('A', server.transport);
+
+    expect(created.size).toBe(1);
+    expect(server.foodLogs.size).toBe(1);
+    expect(await listPending('A')).toEqual([]);
+  });
+
+  it('points queued logs at the food the server already had under another id', async () => {
+    const server = fakeServer();
+    (server.transport.upsertRecipeFood as jest.Mock).mockResolvedValueOnce('server-food');
+    await enqueue('A', recipeFoodOp());
+    await enqueue('A', foodLog('l1', { foodId: 'rf-1' }));
+
+    await flushPending('A', server.transport);
+
+    expect((server.transport.upsertFoodLog as jest.Mock).mock.calls[0][1]).toMatchObject({ id: 'l1', foodId: 'server-food' });
+    expect(await listPending('A')).toEqual([]);
+  });
+
+  it('keeps accounts apart: another account queue is not flushed or touched', async () => {
+    const server = fakeServer();
+    await enqueue('A', recipeFoodOp());
+    await enqueue('B', recipeFoodOp('rf-b'));
+
+    await flushPending('A', server.transport);
+
+    expect(server.calls).toEqual(['recipe-food:A:rf-1']);
+    expect(await listPending('B')).toHaveLength(1);
   });
 });

@@ -18,6 +18,15 @@ export async function forgetFood(userId: string, foodId: string): Promise<void> 
   }
 }
 
+// The server held this food under another id: keep the phone's copy under the id the server uses.
+export async function replaceFoodId(userId: string, from: string, to: string): Promise<void> {
+  const current = await recentFoods(userId);
+  if (!current.some((food) => food.id === from)) return;
+  const renamed = current.map((food) => (food.id === from ? { ...food, id: to } : food));
+  const seen = new Set<string>();
+  await writeCache(userId, 'recentFoods', renamed.filter((food) => (seen.has(food.id) ? false : (seen.add(food.id), true))));
+}
+
 export async function rememberFoods(userId: string, foods: Food[]): Promise<void> {
   const current = await recentFoods(userId);
   const ids = new Set(foods.map((food) => food.id));

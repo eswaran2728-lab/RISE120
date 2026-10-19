@@ -3,12 +3,14 @@
 // replay all address one log. A recipe is logged as a private food (source 'recipe', unverified) that carries its
 // per-serving values; a recipe with any unknown core value cannot be logged, because a log needs real numbers and a
 // missing one must never become zero.
-import { supabase } from '../../lib/supabase';
+//
+// Nothing here needs a connection. The first time a recipe version is logged on this phone, creating its private food
+// is queued (under a stable id) ahead of the log, and both sync when the phone is back online, food first.
 import { stableUuid } from '../../lib/stableId';
+import { enqueue } from '../../sync/queue';
 import type { LocalDate } from '../../sync/types';
-import { recentFoods, rememberFoods } from '../cache';
+import { recentFoods } from '../cache';
 import { queueFoodLog } from '../log';
-import { FOOD_COLUMNS, mapFoodRow } from '../map';
 import type { Food, MealType } from '../types';
 import type { Recipe } from '../recipes';
 
@@ -24,44 +26,33 @@ export function plannedMealLogId(userId: string, ref: PlannedMealRef): string {
   return stableUuid(`${userId}|planned|${ref.date}|${ref.mealType}|${ref.recipeId}|${ref.slotKey}`);
 }
 
-export type PlannedLogResult = { kind: 'logged'; logId: string } | { kind: 'not_confirmed' } | { kind: 'nutrition_unknown' } | { kind: 'offline' };
+export type PlannedLogResult = { kind: 'logged'; logId: string } | { kind: 'not_confirmed' } | { kind: 'nutrition_unknown' };
 
 const sourceIdOf = (recipe: Recipe) => `${recipe.id}@${recipe.version}`;
 
-// The member's private food for this recipe version: remembered on this phone first (so logging works offline once it
-// exists), otherwise read or created on the server. Null when the server cannot be reached.
-async function recipeFood(userId: string, recipe: Recipe): Promise<Food | null> {
-  const sourceId = sourceIdOf(recipe);
-  const remembered = (await recentFoods(userId)).find((f) => f.source === 'recipe' && f.sourceId === sourceId);
-  if (remembered) return remembered;
+// One food id per account and recipe version, so a retry or a lost response addresses the same food.
+export function recipeFoodId(userId: string, recipe: Recipe): string {
+  return stableUuid(`${userId}|recipe-food|${sourceIdOf(recipe)}`);
+}
 
-  const n = recipe.nutrition!.perServing;
-  try {
-    const found = await supabase.from('foods').select(FOOD_COLUMNS).eq('user_id', userId).eq('source', 'recipe').eq('source_id', sourceId).maybeSingle();
-    if (found.error) return null;
-    if (found.data) return mapFoodRow(found.data);
-    const created = await supabase
-      .from('foods')
-      .insert({
-        user_id: userId,
-        name: recipe.name.en,
-        aliases: recipe.status === 'published' ? { ms: [recipe.name.ms], ta: [recipe.name.ta] } : {},
-        serving_desc: `1 serving of ${recipe.name.en}`,
-        calories: n.calories,
-        protein_g: n.proteinG,
-        carbs_g: n.carbsG,
-        fat_g: n.fatG,
-        source: 'recipe',
-        source_id: sourceId,
-        verified: false,
-        region: recipe.region,
-      })
-      .select(FOOD_COLUMNS)
-      .single();
-    return created.error || !created.data ? null : mapFoodRow(created.data);
-  } catch {
-    return null;
-  }
+// The member's private, unverified food for this recipe version, carrying the recipe's source and version.
+function recipeFoodSnapshot(userId: string, recipe: Recipe, n: { calories: number; proteinG: number; carbsG: number; fatG: number }): Food {
+  return {
+    id: recipeFoodId(userId, recipe),
+    userId,
+    name: recipe.name.en,
+    aliases: recipe.status === 'published' ? { ms: [recipe.name.ms], ta: [recipe.name.ta] } : {},
+    servingDesc: `1 serving of ${recipe.name.en}`,
+    calories: n.calories,
+    proteinG: n.proteinG,
+    carbsG: n.carbsG,
+    fatG: n.fatG,
+    source: 'recipe',
+    verified: false,
+    region: recipe.region,
+    sourceId: sourceIdOf(recipe),
+    barcode: null,
+  };
 }
 
 export async function logPlannedMeal(
@@ -73,9 +64,13 @@ export async function logPlannedMeal(
   const n = input.recipe.nutrition?.perServing;
   if (!n || n.calories === null || n.proteinG === null || n.carbsG === null || n.fatG === null) return { kind: 'nutrition_unknown' };
 
-  const food = await recipeFood(userId, input.recipe);
-  if (!food) return { kind: 'offline' };
-  await rememberFoods(userId, [food]);
+  const sourceId = sourceIdOf(input.recipe);
+  let food = (await recentFoods(userId)).find((f) => f.source === 'recipe' && f.sourceId === sourceId);
+  if (!food) {
+    // Never logged on this phone: queue its creation first, so it syncs before the log that refers to it.
+    food = recipeFoodSnapshot(userId, input.recipe, { calories: n.calories, proteinG: n.proteinG, carbsG: n.carbsG, fatG: n.fatG });
+    await enqueue(userId, { kind: 'recipe_food', id: food.id, food, updatedAt: Date.now() });
+  }
   const logId = plannedMealLogId(userId, { date, recipeId: input.recipe.id, mealType: input.mealType, slotKey: input.slotKey });
   await queueFoodLog(userId, date, { id: logId, food, quantity: input.servings, mealType: input.mealType });
   return { kind: 'logged', logId };

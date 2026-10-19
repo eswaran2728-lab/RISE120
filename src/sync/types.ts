@@ -44,13 +44,24 @@ export interface FoodLogOperation extends OperationBase {
   blocked?: PendingLimit | null;
 }
 
-export type PendingOperation = WorkoutSetOperation | CheckinOperation | FoodLogOperation;
+// Creates the member's private, unverified food for a reviewed recipe version that has never been logged. It is queued
+// ahead of the log that uses it, under a stable id (derived from account and recipe version), so a retry or a lost
+// response cannot make a second food. `food.id` is the id the food log refers to.
+export interface RecipeFoodOperation extends OperationBase {
+  kind: 'recipe_food';
+  id: string;
+  food: Food;
+}
+
+export type PendingOperation = WorkoutSetOperation | CheckinOperation | FoodLogOperation | RecipeFoodOperation;
 
 export interface SyncTransport {
   upsertWorkoutSet(userId: string, op: WorkoutSetOperation): Promise<void>;
   upsertCheckin(userId: string, op: CheckinOperation): Promise<void>;
   upsertFoodLog(userId: string, op: FoodLogOperation): Promise<void>;
   deleteFoodLog(userId: string, op: FoodLogOperation): Promise<void>;
+  // Returns the id of the member's food for that recipe version on the server (the op's id unless one already existed).
+  upsertRecipeFood(userId: string, op: RecipeFoodOperation): Promise<string>;
 }
 
 export interface SyncResult {

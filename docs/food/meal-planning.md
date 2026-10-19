@@ -32,11 +32,11 @@ Opening Food, then Meal Planner, shows the plan the member saved, with its revis
 
 ## Logging a planned meal
 
-Choosing a recipe logs nothing. The member presses Log, is asked to confirm, and only then is the meal logged through the existing food-log queue with a **stable id** (account, day, meal, recipe and slot), so a double tap, a retry or a replay is one log, and an edited portion updates that log. Logging is offered for today's meals only. The recipe is logged as the member's private food (`source = recipe`, unverified) holding its per-serving values; a recipe with any unknown core value cannot be logged (a log needs real numbers, never zeros). The first log of a recipe version needs a connection to create that food; afterwards it works offline from the phone's remembered foods.
+Choosing a recipe logs nothing. The member presses Log, is asked to confirm, and only then is the meal logged through the existing food-log queue with a **stable id** (account, day, meal, recipe and slot), so a double tap, a retry or a replay is one log, and an edited portion updates that log. Logging is offered for today's meals only. The recipe is logged as the member's private food (`source = recipe`, unverified) holding its per-serving values; a recipe with any unknown core value cannot be logged (a log needs real numbers, never zeros). Nothing in logging needs a connection. The first time a recipe version is logged on a phone, creating its private food is queued (operation `recipe_food`, under a stable id derived from the account and `recipe-id@version`) ahead of the log, and both sync on reconnect, **food first**; a log whose food could not be created waits and is not sent. A retry or a lost response makes one food and one log, and a food the member already has for that recipe version (for example from another phone) is reused and the queued logs are pointed at it. The food is always the member's own, unverified, with the recipe's source and version; nothing makes the recipe or the food shared or verified. The queue is per account and is cleared with the account.
 
 ## Limits
 
-- The plan shown is always a fresh suggestion; the saved plan is only used for its revision. Re-opening a saved plan is not built.
+- A new suggestion is regenerated from the recipes and choices the phone has when it is asked for; only the saved plan is stable.
 - Budget is per day and in ringgit only (Malaysian recipes are priced in MYR).
 - Premium is read from the limits snapshot; with no snapshot the server decides.
 - Nothing here has been run on a phone.

@@ -3,7 +3,8 @@ import { quotaErrorFrom } from '../monetization/errors';
 import { localPhotoExists, removeLocalPhoto, uploadCheckinPhoto } from '../checkin/photos';
 import { clearPhotoUri } from './queue';
 import { applyFoodLogToDayCache } from '../food/dayCache';
-import type { CheckinOperation, FoodLogOperation, SyncTransport, WorkoutSetOperation } from './types';
+import { createRecipeFood } from './recipeFoodRow';
+import type { CheckinOperation, FoodLogOperation, RecipeFoodOperation, SyncTransport, WorkoutSetOperation } from './types';
 
 // Belt and braces: the queue is already per user, and row-level security rejects a foreign
 // user_id, but never even attempt to send A's data while B is signed in.
@@ -29,6 +30,11 @@ export const supabaseTransport: SyncTransport = {
       { onConflict: 'id' }
     );
     if (error) throw new Error(error.message);
+  },
+
+  async upsertRecipeFood(userId: string, op: RecipeFoodOperation): Promise<string> {
+    await assertSignedInAs(userId);
+    return createRecipeFood(supabase, userId, op);
   },
 
   async upsertFoodLog(userId: string, op: FoodLogOperation): Promise<void> {

@@ -169,8 +169,6 @@ function MealPlannerScreen() {
     if (result.kind === 'logged') {
       setMessage(t('planner.logged'));
       setConfirming(null);
-    } else if (result.kind === 'offline') {
-      setMessage(t('planner.logOffline'));
     } else if (result.kind === 'nutrition_unknown') {
       setMessage(t('planner.logNutritionUnknown'));
     }
