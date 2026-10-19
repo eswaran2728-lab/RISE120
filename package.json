@@ -53,7 +53,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "eval:coach": "node scripts/run-ts.cjs scripts/evaluate-coach.ts",
-    "content:check": "node scripts/run-ts.cjs scripts/validate-training-content.ts"
+    "content:check": "node scripts/run-ts.cjs scripts/validate-training-content.ts",
+    "content:readiness": "node scripts/run-ts.cjs scripts/report-content-readiness.ts"
   },
   "private": true,
   "jest": {

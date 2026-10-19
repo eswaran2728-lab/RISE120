@@ -1,6 +1,6 @@
 # Training content
 
-Reviewed exercises and session templates. **This folder is empty on purpose**: nothing here may be invented or copied. Every published item needs a qualified reviewer and licensed or owned demonstrations, and neither exists yet. See `docs/superpowers/plans/2026-10-15-rise120-full-roadmap.md`, task C1.
+Reviewed exercises and session templates. **Everything here is an unreviewed DRAFT** (a beginner pack written by an AI assistant: see `docs/product/guided-content-pack.md`). Nothing may be invented, copied or published without a qualified reviewer and real media evidence; see `docs/product/guided-content-review-checklist.md`. `npm run content:readiness` lists what is still missing. Every published item needs a qualified reviewer and licensed or owned demonstrations, and neither exists yet. See `docs/superpowers/plans/2026-10-15-rise120-full-roadmap.md`, task C1.
 
 - `exercises/<id>.json` — one `ExerciseVersion` per file (type in `src/workout/catalogue.ts`).
 - `sessions/<id>.json` — one `SessionTemplate` per file.
