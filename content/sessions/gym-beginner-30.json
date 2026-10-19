@@ -1,0 +1,43 @@
+{
+  "id": "gym-beginner-30",
+  "version": 1,
+  "goal": "recomp",
+  "level": "beginner",
+  "minutes": 30,
+  "location": "gym",
+  "dayType": "training",
+  "exercises": [
+    {
+      "exerciseId": "leg-press-machine",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "dumbbell-romanian-deadlift",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "chest-press-machine",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "seated-cable-row",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "lat-pulldown",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "bird-dog",
+      "sets": 3,
+      "reps": 8
+    }
+  ],
+  "reviewer": null,
+  "status": "draft"
+}

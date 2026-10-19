@@ -1,0 +1,33 @@
+{
+  "id": "home-equipment-20",
+  "version": 1,
+  "goal": "recomp",
+  "level": "beginner",
+  "minutes": 20,
+  "location": "home",
+  "dayType": "training",
+  "exercises": [
+    {
+      "exerciseId": "goblet-squat",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "dumbbell-floor-press",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "dumbbell-row",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "dead-bug",
+      "sets": 3,
+      "reps": 8
+    }
+  ],
+  "reviewer": null,
+  "status": "draft"
+}

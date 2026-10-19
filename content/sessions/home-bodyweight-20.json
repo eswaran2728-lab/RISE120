@@ -1,0 +1,33 @@
+{
+  "id": "home-bodyweight-20",
+  "version": 1,
+  "goal": "recomp",
+  "level": "beginner",
+  "minutes": 20,
+  "location": "home",
+  "dayType": "training",
+  "exercises": [
+    {
+      "exerciseId": "bodyweight-squat",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "glute-bridge",
+      "sets": 3,
+      "reps": 12
+    },
+    {
+      "exerciseId": "incline-push-up",
+      "sets": 3,
+      "reps": 8
+    },
+    {
+      "exerciseId": "dead-bug",
+      "sets": 3,
+      "reps": 8
+    }
+  ],
+  "reviewer": null,
+  "status": "draft"
+}

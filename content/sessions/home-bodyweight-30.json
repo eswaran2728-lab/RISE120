@@ -1,0 +1,43 @@
+{
+  "id": "home-bodyweight-30",
+  "version": 1,
+  "goal": "recomp",
+  "level": "beginner",
+  "minutes": 30,
+  "location": "home",
+  "dayType": "training",
+  "exercises": [
+    {
+      "exerciseId": "bodyweight-squat",
+      "sets": 3,
+      "reps": 12
+    },
+    {
+      "exerciseId": "hip-hinge-bodyweight",
+      "sets": 3,
+      "reps": 12
+    },
+    {
+      "exerciseId": "glute-bridge",
+      "sets": 3,
+      "reps": 12
+    },
+    {
+      "exerciseId": "incline-push-up",
+      "sets": 3,
+      "reps": 8
+    },
+    {
+      "exerciseId": "dead-bug",
+      "sets": 3,
+      "reps": 8
+    },
+    {
+      "exerciseId": "bird-dog",
+      "sets": 3,
+      "reps": 8
+    }
+  ],
+  "reviewer": null,
+  "status": "draft"
+}

@@ -1,0 +1,36 @@
+{
+  "id": "wall-push-up",
+  "version": 1,
+  "pattern": "push",
+  "equipment": "none",
+  "name": {
+    "en": "Wall push-up",
+    "ms": "Tekan tubi dinding",
+    "ta": "சுவர் புஷ்-அப்"
+  },
+  "cues": [
+    {
+      "en": "Stand an arm length from a wall and place your hands on it at shoulder height, shoulder-width apart.",
+      "ms": "Berdiri sejauh panjang lengan dari dinding dan letakkan tangan pada dinding setinggi bahu, selebar bahu.",
+      "ta": "சுவரிலிருந்து ஒரு கை நீளம் தள்ளி நின்று, கைகளை தோள் உயரத்தில் தோள் அகலத்தில் சுவரில் வைக்கவும்."
+    },
+    {
+      "en": "Bend your elbows to bring your chest towards the wall, keeping your body in a straight line.",
+      "ms": "Bengkokkan siku untuk membawa dada ke arah dinding, dengan badan lurus.",
+      "ta": "உடலை நேர்கோட்டில் வைத்து, முழங்கைகளை மடக்கி மார்பை சுவரை நோக்கிக் கொண்டு செல்லுங்கள்."
+    },
+    {
+      "en": "Push the wall away until your arms are straight.",
+      "ms": "Tolak dinding sehingga lengan lurus.",
+      "ta": "கைகள் நேராகும் வரை சுவரைத் தள்ளுங்கள்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "incline-push-up",
+    "knee-push-up"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

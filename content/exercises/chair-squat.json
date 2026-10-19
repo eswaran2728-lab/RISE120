@@ -1,0 +1,36 @@
+{
+  "id": "chair-squat",
+  "version": 1,
+  "pattern": "squat",
+  "equipment": "none",
+  "name": {
+    "en": "Chair squat",
+    "ms": "Skuat kerusi",
+    "ta": "நாற்காலி ஸ்குவாட்"
+  },
+  "cues": [
+    {
+      "en": "Stand in front of a sturdy chair with your feet shoulder-width apart.",
+      "ms": "Berdiri di hadapan kerusi yang kukuh dengan kaki selebar bahu.",
+      "ta": "உறுதியான நாற்காலிக்கு முன் கால்களை தோள் அகலத்தில் வைத்து நில்லுங்கள்."
+    },
+    {
+      "en": "Sit back until you lightly touch the chair, then stand up without using your hands.",
+      "ms": "Duduk ke belakang sehingga menyentuh kerusi dengan ringan, kemudian berdiri tanpa menggunakan tangan.",
+      "ta": "நாற்காலியை லேசாகத் தொடும் வரை பின்னால் உட்காருங்கள்; பிறகு கைகளைப் பயன்படுத்தாமல் எழுந்து நில்லுங்கள்."
+    },
+    {
+      "en": "Keep your chest up and your knees in line with your toes.",
+      "ms": "Pastikan dada tegak dan lutut sejajar dengan jari kaki.",
+      "ta": "மார்பை நிமிர்த்தி, முழங்கால்களை கால் விரல்களுக்கு நேராக வைத்திருங்கள்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "bodyweight-squat",
+    "goblet-squat"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

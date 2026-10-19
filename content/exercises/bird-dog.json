@@ -1,0 +1,35 @@
+{
+  "id": "bird-dog",
+  "version": 1,
+  "pattern": "core",
+  "equipment": "none",
+  "name": {
+    "en": "Bird dog",
+    "ms": "Anjing burung",
+    "ta": "பர்ட் டாக்"
+  },
+  "cues": [
+    {
+      "en": "Start on your hands and knees with your hands under your shoulders and your knees under your hips.",
+      "ms": "Mulakan dengan tangan dan lutut di lantai, tangan di bawah bahu dan lutut di bawah pinggul.",
+      "ta": "கைகள் தோள்களுக்குக் கீழும் முழங்கால்கள் இடுப்புக்குக் கீழும் இருக்கும்படி கைகளையும் முழங்கால்களையும் தரையில் வைத்து தொடங்குங்கள்."
+    },
+    {
+      "en": "Reach one arm forward and the opposite leg back, keeping your hips level and your back flat.",
+      "ms": "Hulurkan satu lengan ke hadapan dan kaki yang bertentangan ke belakang, pastikan pinggul sekata dan belakang rata.",
+      "ta": "இடுப்பை சமமாகவும் முதுகை தட்டையாகவும் வைத்து, ஒரு கையை முன்னாலும் எதிர்புற காலை பின்னாலும் நீட்டுங்கள்."
+    },
+    {
+      "en": "Pause, return with control, and switch sides.",
+      "ms": "Berhenti seketika, kembali dengan terkawal, dan tukar sebelah.",
+      "ta": "சற்று நிறுத்தி, கட்டுப்பாட்டுடன் திரும்பி, பக்கத்தை மாற்றுங்கள்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "dead-bug"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

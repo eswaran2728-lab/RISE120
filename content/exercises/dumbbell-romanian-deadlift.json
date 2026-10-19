@@ -1,0 +1,38 @@
+{
+  "id": "dumbbell-romanian-deadlift",
+  "version": 1,
+  "pattern": "hinge",
+  "equipment": "home",
+  "name": {
+    "en": "Dumbbell Romanian deadlift",
+    "ms": "Deadlift Romania dengan dumbbell",
+    "ta": "டம்பெல் ரோமானிய டெட்லிஃப்ட்"
+  },
+  "cues": [
+    {
+      "en": "Hold a dumbbell in each hand in front of your thighs and stand with your feet hip-width apart.",
+      "ms": "Pegang sebuah dumbbell di setiap tangan di hadapan paha dan berdiri dengan kaki selebar pinggul.",
+      "ta": "ஒவ்வொரு கையிலும் ஒரு டம்பெல்லை தொடைகளுக்கு முன்னால் பிடித்து, கால்களை இடுப்பு அகலத்தில் வைத்து நில்லுங்கள்."
+    },
+    {
+      "en": "Push your hips back with a soft bend in your knees and slide the dumbbells down your thighs, keeping your back flat.",
+      "ms": "Tolak pinggul ke belakang dengan lutut sedikit bengkok dan gelongsorkan dumbbell ke bawah paha, belakang tetap rata.",
+      "ta": "முழங்கால்களை சற்று மடக்கி இடுப்பை பின்னால் தள்ளி, முதுகை தட்டையாக வைத்து டம்பெல்களை தொடைகளில் சறுக்கி கீழே கொண்டு செல்லுங்கள்."
+    },
+    {
+      "en": "Stop when you feel a stretch behind your legs, then squeeze your glutes to stand tall.",
+      "ms": "Berhenti apabila anda merasai regangan di belakang kaki, kemudian ketatkan otot punggung untuk berdiri tegak.",
+      "ta": "கால்களின் பின்புறம் இழுப்பு உணரும்போது நிறுத்துங்கள்; பிறகு இடுப்பு தசைகளை இறுக்கி நிமிருங்கள்."
+    }
+  ],
+  "regressions": [
+    "hip-hinge-bodyweight"
+  ],
+  "alternatives": [
+    "hip-hinge-bodyweight",
+    "glute-bridge"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

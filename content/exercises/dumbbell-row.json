@@ -1,0 +1,36 @@
+{
+  "id": "dumbbell-row",
+  "version": 1,
+  "pattern": "pull",
+  "equipment": "home",
+  "name": {
+    "en": "One-arm dumbbell row",
+    "ms": "Dayung dumbbell sebelah tangan",
+    "ta": "ஒரு கை டம்பெல் இழுப்பு"
+  },
+  "cues": [
+    {
+      "en": "Place one hand and one knee on a sturdy bench or chair and hold a dumbbell in the other hand with your arm hanging down.",
+      "ms": "Letakkan satu tangan dan satu lutut pada bangku atau kerusi yang kukuh dan pegang dumbbell di tangan yang lain dengan lengan tergantung ke bawah.",
+      "ta": "ஒரு கையையும் ஒரு முழங்காலையும் உறுதியான பெஞ்ச் அல்லது நாற்காலியில் வைத்து, மற்றொரு கையில் டம்பெல்லை பிடித்து கையை கீழே தொங்க விடுங்கள்."
+    },
+    {
+      "en": "Keep your back flat and pull the dumbbell towards your hip, leading with your elbow.",
+      "ms": "Pastikan belakang rata dan tarik dumbbell ke arah pinggul, dengan siku mendahului.",
+      "ta": "முதுகை தட்டையாக வைத்து, முழங்கையை முன்னிறுத்தி டம்பெல்லை இடுப்பை நோக்கி இழுங்கள்."
+    },
+    {
+      "en": "Lower slowly until your arm is straight, then repeat on the other side.",
+      "ms": "Turunkan perlahan-lahan sehingga lengan lurus, kemudian ulang di sebelah lagi.",
+      "ta": "கை நேராகும் வரை மெதுவாக இறக்குங்கள்; பிறகு மறுபக்கத்தில் செய்யுங்கள்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "band-row",
+    "seated-cable-row"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

@@ -1,0 +1,36 @@
+{
+  "id": "chest-press-machine",
+  "version": 1,
+  "pattern": "push",
+  "equipment": "gym",
+  "name": {
+    "en": "Chest press machine",
+    "ms": "Mesin tekan dada",
+    "ta": "மார்பு பிரஸ் இயந்திரம்"
+  },
+  "cues": [
+    {
+      "en": "Adjust the seat so the handles are level with the middle of your chest, and sit with your back against the pad.",
+      "ms": "Laraskan tempat duduk supaya pemegang sejajar dengan tengah dada, dan duduk dengan belakang pada pad.",
+      "ta": "கைப்பிடிகள் மார்பின் நடுவில் சமமாக இருக்கும்படி இருக்கையை சரிசெய்து, முதுகை திண்டில் ஒட்டி அமருங்கள்."
+    },
+    {
+      "en": "Press the handles forward until your arms are almost straight.",
+      "ms": "Tolak pemegang ke hadapan sehingga lengan hampir lurus.",
+      "ta": "கைகள் கிட்டத்தட்ட நேராகும் வரை கைப்பிடிகளை முன்னால் தள்ளுங்கள்."
+    },
+    {
+      "en": "Return slowly with control. Do not let the weight stack drop.",
+      "ms": "Kembali perlahan-lahan dengan terkawal. Jangan biarkan timbunan berat jatuh.",
+      "ta": "கட்டுப்பாட்டுடன் மெதுவாகத் திரும்புங்கள். எடைத் தொகுப்பு தொப்பென விழ விடாதீர்கள்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "dumbbell-floor-press",
+    "incline-push-up"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

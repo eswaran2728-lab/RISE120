@@ -1,0 +1,35 @@
+{
+  "id": "glute-bridge",
+  "version": 1,
+  "pattern": "hinge",
+  "equipment": "none",
+  "name": {
+    "en": "Glute bridge",
+    "ms": "Jambatan punggung",
+    "ta": "குளூட் பிரிட்ஜ்"
+  },
+  "cues": [
+    {
+      "en": "Lie on your back with your knees bent and your feet flat on the floor, hip-width apart.",
+      "ms": "Baring telentang dengan lutut dibengkokkan dan tapak kaki rata di lantai, selebar pinggul.",
+      "ta": "முதுகில் படுத்து, முழங்கால்களை மடக்கி, பாதங்களை இடுப்பு அகலத்தில் தரையில் தட்டையாக வைக்கவும்."
+    },
+    {
+      "en": "Press through your heels and lift your hips until your body makes a straight line from shoulders to knees.",
+      "ms": "Tolak melalui tumit dan angkat pinggul sehingga badan membentuk garisan lurus dari bahu ke lutut.",
+      "ta": "குதிகால்களால் அழுத்தி, தோள்பட்டையிலிருந்து முழங்கால் வரை உடல் நேர்கோட்டில் வரும் வரை இடுப்பை உயர்த்துங்கள்."
+    },
+    {
+      "en": "Pause briefly at the top, then lower slowly. Do not arch your lower back.",
+      "ms": "Berhenti sebentar di atas, kemudian turun perlahan-lahan. Jangan melengkungkan belakang bawah.",
+      "ta": "மேலே சற்று நிறுத்தி, பிறகு மெதுவாக இறக்குங்கள். கீழ் முதுகை வளைக்க வேண்டாம்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "hip-hinge-bodyweight"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

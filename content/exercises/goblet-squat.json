@@ -1,0 +1,39 @@
+{
+  "id": "goblet-squat",
+  "version": 1,
+  "pattern": "squat",
+  "equipment": "home",
+  "name": {
+    "en": "Goblet squat",
+    "ms": "Skuat goblet",
+    "ta": "கோப்லெட் ஸ்குவாட்"
+  },
+  "cues": [
+    {
+      "en": "Hold one dumbbell upright against your chest with both hands and stand with your feet shoulder-width apart.",
+      "ms": "Pegang sebuah dumbbell tegak pada dada dengan kedua-dua tangan dan berdiri dengan kaki selebar bahu.",
+      "ta": "ஒரு டம்பெல்லை இரு கைகளாலும் மார்புக்கு எதிராக நிமிர்த்திப் பிடித்து, கால்களை தோள் அகலத்தில் வைத்து நில்லுங்கள்."
+    },
+    {
+      "en": "Sit your hips back and down between your knees, keeping your chest up and your elbows inside your knees.",
+      "ms": "Tolak pinggul ke belakang dan ke bawah di antara lutut, dada tegak dan siku di dalam lutut.",
+      "ta": "மார்பை நிமிர்த்தி, முழங்கைகளை முழங்கால்களுக்குள் வைத்து, இடுப்பை முழங்கால்களுக்கு இடையே பின்னாலும் கீழும் தள்ளுங்கள்."
+    },
+    {
+      "en": "Press through your whole foot to stand up. Choose a weight you can control for every rep.",
+      "ms": "Tolak melalui seluruh tapak kaki untuk berdiri. Pilih berat yang boleh anda kawal pada setiap ulangan.",
+      "ta": "முழுப் பாதத்தாலும் அழுத்தி எழுந்து நில்லுங்கள். ஒவ்வொரு முறையும் கட்டுப்படுத்தக்கூடிய எடையைத் தேர்ந்தெடுங்கள்."
+    }
+  ],
+  "regressions": [
+    "bodyweight-squat"
+  ],
+  "alternatives": [
+    "bodyweight-squat",
+    "chair-squat",
+    "leg-press-machine"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

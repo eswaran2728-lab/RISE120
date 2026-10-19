@@ -1,0 +1,36 @@
+{
+  "id": "band-row",
+  "version": 1,
+  "pattern": "pull",
+  "equipment": "home",
+  "name": {
+    "en": "Resistance band row",
+    "ms": "Dayung tali rintangan",
+    "ta": "எதிர்ப்பு பட்டை இழுப்பு"
+  },
+  "cues": [
+    {
+      "en": "Sit on the floor with your legs extended and loop a resistance band around your feet, holding an end in each hand.",
+      "ms": "Duduk di lantai dengan kaki dihulurkan dan lilitkan tali rintangan pada kaki, pegang hujung di setiap tangan.",
+      "ta": "கால்களை நீட்டி தரையில் அமர்ந்து, ஒரு எதிர்ப்பு பட்டையை பாதங்களைச் சுற்றி மாட்டி, ஒவ்வொரு கையிலும் ஒரு முனையைப் பிடிக்கவும்."
+    },
+    {
+      "en": "Sit tall, then pull your elbows back along your sides and squeeze your shoulder blades together.",
+      "ms": "Duduk tegak, kemudian tarik siku ke belakang di sisi badan dan rapatkan tulang belikat.",
+      "ta": "நிமிர்ந்து அமர்ந்து, முழங்கைகளை உடலின் பக்கவாட்டில் பின்னால் இழுத்து, தோள்பட்டை எலும்புகளை ஒன்றாக அழுத்துங்கள்."
+    },
+    {
+      "en": "Return slowly with control. Check the band for tears before every use.",
+      "ms": "Kembali perlahan-lahan dengan terkawal. Periksa tali untuk koyak sebelum setiap penggunaan.",
+      "ta": "கட்டுப்பாட்டுடன் மெதுவாகத் திரும்புங்கள். ஒவ்வொரு முறையும் பயன்படுத்தும் முன் பட்டையில் கிழிசல் உள்ளதா என்று பாருங்கள்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "dumbbell-row",
+    "seated-cable-row"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

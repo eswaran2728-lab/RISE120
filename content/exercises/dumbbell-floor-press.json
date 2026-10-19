@@ -1,0 +1,39 @@
+{
+  "id": "dumbbell-floor-press",
+  "version": 1,
+  "pattern": "push",
+  "equipment": "home",
+  "name": {
+    "en": "Dumbbell floor press",
+    "ms": "Tekan dumbbell di lantai",
+    "ta": "டம்பெல் தரை பிரஸ்"
+  },
+  "cues": [
+    {
+      "en": "Lie on your back with your knees bent and a dumbbell in each hand, elbows resting on the floor.",
+      "ms": "Baring telentang dengan lutut dibengkokkan dan sebuah dumbbell di setiap tangan, siku bersandar pada lantai.",
+      "ta": "முதுகில் படுத்து, முழங்கால்களை மடக்கி, ஒவ்வொரு கையிலும் ஒரு டம்பெல்லுடன் முழங்கைகளை தரையில் வைக்கவும்."
+    },
+    {
+      "en": "Press the dumbbells straight up until your arms are extended, without locking your elbows hard.",
+      "ms": "Tolak dumbbell lurus ke atas sehingga lengan terhulur, tanpa mengunci siku dengan kuat.",
+      "ta": "கைகள் நீளும் வரை டம்பெல்களை நேராக மேலே தள்ளுங்கள்; முழங்கைகளை பலமாகப் பூட்ட வேண்டாம்."
+    },
+    {
+      "en": "Lower slowly until your upper arms touch the floor.",
+      "ms": "Turunkan perlahan-lahan sehingga lengan atas menyentuh lantai.",
+      "ta": "மேல் கைகள் தரையைத் தொடும் வரை மெதுவாக இறக்குங்கள்."
+    }
+  ],
+  "regressions": [
+    "incline-push-up"
+  ],
+  "alternatives": [
+    "incline-push-up",
+    "knee-push-up",
+    "chest-press-machine"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

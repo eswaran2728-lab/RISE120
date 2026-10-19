@@ -1,0 +1,39 @@
+{
+  "id": "bodyweight-squat",
+  "version": 1,
+  "pattern": "squat",
+  "equipment": "none",
+  "name": {
+    "en": "Bodyweight squat",
+    "ms": "Skuat berat badan",
+    "ta": "உடல் எடை ஸ்குவாட்"
+  },
+  "cues": [
+    {
+      "en": "Stand with your feet about shoulder-width apart and your toes slightly turned out.",
+      "ms": "Berdiri dengan kaki selebar bahu dan jari kaki sedikit terkeluar.",
+      "ta": "கால்களை தோள் அகலத்தில் வைத்து, கால் விரல்களை சற்று வெளிப்புறமாகத் திருப்பி நில்லுங்கள்."
+    },
+    {
+      "en": "Sit your hips back and down as if sitting on a chair, keeping your chest up.",
+      "ms": "Tolak pinggul ke belakang dan ke bawah seolah-olah duduk di atas kerusi, dada tegak.",
+      "ta": "நாற்காலியில் உட்காருவது போல இடுப்பை பின்னாலும் கீழும் தள்ளுங்கள்; மார்பை நிமிர்த்தி வைத்திருங்கள்."
+    },
+    {
+      "en": "Keep your knees in line with your toes, then press through your whole foot to stand up.",
+      "ms": "Pastikan lutut sejajar dengan jari kaki, kemudian tolak melalui seluruh tapak kaki untuk berdiri.",
+      "ta": "முழங்கால்களை கால் விரல்களுக்கு நேராக வைத்து, முழு பாதத்தாலும் அழுத்தி எழுந்து நில்லுங்கள்."
+    }
+  ],
+  "regressions": [
+    "chair-squat"
+  ],
+  "alternatives": [
+    "chair-squat",
+    "goblet-squat",
+    "leg-press-machine"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

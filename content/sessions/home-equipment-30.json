@@ -1,0 +1,43 @@
+{
+  "id": "home-equipment-30",
+  "version": 1,
+  "goal": "recomp",
+  "level": "beginner",
+  "minutes": 30,
+  "location": "home",
+  "dayType": "training",
+  "exercises": [
+    {
+      "exerciseId": "goblet-squat",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "dumbbell-romanian-deadlift",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "dumbbell-floor-press",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "band-row",
+      "sets": 3,
+      "reps": 12
+    },
+    {
+      "exerciseId": "dumbbell-row",
+      "sets": 3,
+      "reps": 10
+    },
+    {
+      "exerciseId": "bird-dog",
+      "sets": 3,
+      "reps": 8
+    }
+  ],
+  "reviewer": null,
+  "status": "draft"
+}

@@ -1,0 +1,28 @@
+{
+  "id": "home-bodyweight-10",
+  "version": 1,
+  "goal": "recomp",
+  "level": "beginner",
+  "minutes": 10,
+  "location": "home",
+  "dayType": "training",
+  "exercises": [
+    {
+      "exerciseId": "bodyweight-squat",
+      "sets": 2,
+      "reps": 10
+    },
+    {
+      "exerciseId": "glute-bridge",
+      "sets": 2,
+      "reps": 12
+    },
+    {
+      "exerciseId": "wall-push-up",
+      "sets": 2,
+      "reps": 10
+    }
+  ],
+  "reviewer": null,
+  "status": "draft"
+}

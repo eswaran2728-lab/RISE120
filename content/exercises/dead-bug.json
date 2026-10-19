@@ -1,0 +1,35 @@
+{
+  "id": "dead-bug",
+  "version": 1,
+  "pattern": "core",
+  "equipment": "none",
+  "name": {
+    "en": "Dead bug",
+    "ms": "Pepijat mati",
+    "ta": "டெட் பக்"
+  },
+  "cues": [
+    {
+      "en": "Lie on your back with your arms pointing to the ceiling and your knees bent over your hips.",
+      "ms": "Baring telentang dengan lengan menghala ke siling dan lutut dibengkokkan di atas pinggul.",
+      "ta": "முதுகில் படுத்து, கைகளை கூரையை நோக்கி நீட்டி, முழங்கால்களை இடுப்புக்கு மேலே மடக்கி வைக்கவும்."
+    },
+    {
+      "en": "Press your lower back gently into the floor. Slowly lower one arm and the opposite leg towards the floor.",
+      "ms": "Tekan belakang bawah dengan lembut ke lantai. Turunkan perlahan-lahan satu lengan dan kaki yang bertentangan ke arah lantai.",
+      "ta": "கீழ் முதுகை மெதுவாக தரையில் அழுத்துங்கள். ஒரு கையையும் எதிர்புற காலையும் மெதுவாக தரையை நோக்கி இறக்குங்கள்."
+    },
+    {
+      "en": "Return to the start and switch sides. Move slowly and breathe steadily.",
+      "ms": "Kembali ke kedudukan asal dan tukar sebelah. Bergerak perlahan dan bernafas dengan stabil.",
+      "ta": "தொடக்க நிலைக்குத் திரும்பி பக்கத்தை மாற்றுங்கள். மெதுவாக நகர்ந்து சீராக சுவாசியுங்கள்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "bird-dog"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

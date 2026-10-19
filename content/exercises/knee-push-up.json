@@ -1,0 +1,38 @@
+{
+  "id": "knee-push-up",
+  "version": 1,
+  "pattern": "push",
+  "equipment": "none",
+  "name": {
+    "en": "Knee push-up",
+    "ms": "Tekan tubi lutut",
+    "ta": "முழங்கால் புஷ்-அப்"
+  },
+  "cues": [
+    {
+      "en": "Start on your hands and knees with your hands slightly wider than your shoulders.",
+      "ms": "Mulakan dengan tangan dan lutut di lantai, tangan sedikit lebih lebar daripada bahu.",
+      "ta": "கைகளையும் முழங்கால்களையும் தரையில் வைத்து தொடங்குங்கள்; கைகள் தோள்களை விட சற்று அகலமாக இருக்கட்டும்."
+    },
+    {
+      "en": "Keep a straight line from your head to your knees and lower your chest towards the floor.",
+      "ms": "Pastikan garisan lurus dari kepala ke lutut dan turunkan dada ke arah lantai.",
+      "ta": "தலையிலிருந்து முழங்கால் வரை நேர்கோட்டில் வைத்து, மார்பை தரையை நோக்கி இறக்குங்கள்."
+    },
+    {
+      "en": "Push the floor away to return to the start.",
+      "ms": "Tolak lantai untuk kembali ke kedudukan asal.",
+      "ta": "தொடக்க நிலைக்குத் திரும்ப தரையைத் தள்ளுங்கள்."
+    }
+  ],
+  "regressions": [
+    "wall-push-up"
+  ],
+  "alternatives": [
+    "incline-push-up",
+    "wall-push-up"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

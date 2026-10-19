@@ -1,0 +1,35 @@
+{
+  "id": "hip-hinge-bodyweight",
+  "version": 1,
+  "pattern": "hinge",
+  "equipment": "none",
+  "name": {
+    "en": "Bodyweight hip hinge",
+    "ms": "Engsel pinggul berat badan",
+    "ta": "உடல் எடை இடுப்பு மடிப்பு"
+  },
+  "cues": [
+    {
+      "en": "Stand tall with your feet hip-width apart and your hands on your hips.",
+      "ms": "Berdiri tegak dengan kaki selebar pinggul dan tangan di pinggang.",
+      "ta": "கால்களை இடுப்பு அகலத்தில் வைத்து, கைகளை இடுப்பில் வைத்து நேராக நில்லுங்கள்."
+    },
+    {
+      "en": "Push your hips back with a soft bend in your knees, and lean your chest forward with a flat back.",
+      "ms": "Tolak pinggul ke belakang dengan lutut sedikit bengkok, dan condongkan dada ke hadapan dengan belakang yang rata.",
+      "ta": "முழங்கால்களை சற்று மடக்கி இடுப்பை பின்னால் தள்ளி, முதுகை தட்டையாக வைத்து மார்பை முன்னால் சாயுங்கள்."
+    },
+    {
+      "en": "Squeeze your glutes to stand back up. Stop before your back rounds.",
+      "ms": "Ketatkan otot punggung untuk berdiri semula. Berhenti sebelum belakang membulat.",
+      "ta": "இடுப்பு தசைகளை இறுக்கி மீண்டும் நிமிருங்கள். முதுகு வளையும் முன் நிறுத்துங்கள்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "glute-bridge"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

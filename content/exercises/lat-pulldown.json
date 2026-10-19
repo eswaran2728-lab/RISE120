@@ -1,0 +1,37 @@
+{
+  "id": "lat-pulldown",
+  "version": 1,
+  "pattern": "pull",
+  "equipment": "gym",
+  "name": {
+    "en": "Lat pulldown",
+    "ms": "Tarik ke bawah lat",
+    "ta": "லாட் புல்டவுன்"
+  },
+  "cues": [
+    {
+      "en": "Adjust the thigh pad so your legs are held firmly, and take the bar with a grip slightly wider than your shoulders.",
+      "ms": "Laraskan pad paha supaya kaki ditahan dengan kukuh, dan pegang bar dengan genggaman sedikit lebih lebar daripada bahu.",
+      "ta": "கால்கள் உறுதியாகப் பிடிபடும்படி தொடைத் திண்டை சரிசெய்து, தோள்களை விட சற்று அகலமான பிடியில் பட்டையைப் பிடிக்கவும்."
+    },
+    {
+      "en": "Sit tall and pull the bar down to your upper chest, bringing your elbows down and back.",
+      "ms": "Duduk tegak dan tarik bar ke bawah ke dada atas, bawa siku ke bawah dan ke belakang.",
+      "ta": "நிமிர்ந்து அமர்ந்து, முழங்கைகளை கீழும் பின்னாலும் கொண்டு வந்து, பட்டையை மேல் மார்பு வரை இழுக்கவும்."
+    },
+    {
+      "en": "Let the bar rise slowly until your arms are straight. Do not lean far back or pull behind your neck.",
+      "ms": "Biarkan bar naik perlahan-lahan sehingga lengan lurus. Jangan bersandar jauh ke belakang atau tarik di belakang leher.",
+      "ta": "கைகள் நேராகும் வரை பட்டை மெதுவாக மேலே செல்ல விடுங்கள். அதிகம் பின்னால் சாயாதீர்கள்; கழுத்துக்குப் பின்னால் இழுக்காதீர்கள்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "band-row",
+    "dumbbell-row",
+    "seated-cable-row"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

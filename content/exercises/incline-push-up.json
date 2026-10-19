@@ -1,0 +1,39 @@
+{
+  "id": "incline-push-up",
+  "version": 1,
+  "pattern": "push",
+  "equipment": "none",
+  "name": {
+    "en": "Incline push-up",
+    "ms": "Tekan tubi condong",
+    "ta": "சாய்வு புஷ்-அப்"
+  },
+  "cues": [
+    {
+      "en": "Place your hands on a sturdy, stable surface such as a kitchen counter or a bench, slightly wider than your shoulders.",
+      "ms": "Letakkan tangan pada permukaan yang kukuh dan stabil seperti kaunter dapur atau bangku, sedikit lebih lebar daripada bahu.",
+      "ta": "சமையலறை மேடை அல்லது பெஞ்ச் போன்ற உறுதியான, அசையாத மேற்பரப்பில் கைகளை தோள்களை விட சற்று அகலமாக வைக்கவும்."
+    },
+    {
+      "en": "Keep your body in a straight line from head to heels and lower your chest towards the surface.",
+      "ms": "Pastikan badan lurus dari kepala ke tumit dan turunkan dada ke arah permukaan.",
+      "ta": "தலையிலிருந்து குதிகால் வரை உடலை நேர்கோட்டில் வைத்து, மார்பை மேற்பரப்பை நோக்கி இறக்குங்கள்."
+    },
+    {
+      "en": "Push back up until your arms are straight. Do not let your hips sag.",
+      "ms": "Tolak naik semula sehingga lengan lurus. Jangan biarkan pinggul melorot.",
+      "ta": "கைகள் நேராகும் வரை மேலே தள்ளுங்கள். இடுப்பு தொங்க விடாதீர்கள்."
+    }
+  ],
+  "regressions": [
+    "wall-push-up"
+  ],
+  "alternatives": [
+    "knee-push-up",
+    "wall-push-up",
+    "dumbbell-floor-press"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}

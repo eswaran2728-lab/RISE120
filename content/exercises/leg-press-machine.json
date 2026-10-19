@@ -1,0 +1,36 @@
+{
+  "id": "leg-press-machine",
+  "version": 1,
+  "pattern": "squat",
+  "equipment": "gym",
+  "name": {
+    "en": "Leg press machine",
+    "ms": "Mesin tekan kaki",
+    "ta": "லெக் பிரஸ் இயந்திரம்"
+  },
+  "cues": [
+    {
+      "en": "Adjust the seat so your knees are bent at about 90 degrees, and place your feet shoulder-width apart on the platform.",
+      "ms": "Laraskan tempat duduk supaya lutut dibengkokkan kira-kira 90 darjah dan letakkan kaki selebar bahu pada pelantar.",
+      "ta": "முழங்கால்கள் சுமார் 90 டிகிரியில் மடங்கும்படி இருக்கையை சரிசெய்து, பாதங்களை தோள் அகலத்தில் மேடையில் வைக்கவும்."
+    },
+    {
+      "en": "Press the platform away without locking your knees, keeping your lower back against the seat.",
+      "ms": "Tolak pelantar menjauh tanpa mengunci lutut, dengan belakang bawah melekat pada tempat duduk.",
+      "ta": "கீழ் முதுகை இருக்கையில் ஒட்டியபடி, முழங்கால்களைப் பூட்டாமல் மேடையைத் தள்ளுங்கள்."
+    },
+    {
+      "en": "Lower slowly until your knees are bent again. Start with a light weight.",
+      "ms": "Turun perlahan-lahan sehingga lutut bengkok semula. Mulakan dengan berat yang ringan.",
+      "ta": "முழங்கால்கள் மீண்டும் மடங்கும் வரை மெதுவாக இறக்குங்கள். இலகுவான எடையுடன் தொடங்குங்கள்."
+    }
+  ],
+  "regressions": [],
+  "alternatives": [
+    "goblet-squat",
+    "bodyweight-squat"
+  ],
+  "media": null,
+  "reviewer": null,
+  "status": "draft"
+}
