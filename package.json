@@ -55,7 +55,8 @@
     "eval:coach": "node scripts/run-ts.cjs scripts/evaluate-coach.ts",
     "content:check": "node scripts/run-ts.cjs scripts/validate-training-content.ts",
     "content:readiness": "node scripts/run-ts.cjs scripts/report-content-readiness.ts",
-    "content:import": "node scripts/run-ts.cjs scripts/import-training-content.ts"
+    "content:import": "node scripts/run-ts.cjs scripts/import-training-content.ts",
+    "recipes:check": "node scripts/run-ts.cjs scripts/validate-recipes.ts"
   },
   "private": true,
   "jest": {

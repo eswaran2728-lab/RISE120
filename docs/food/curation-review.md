@@ -64,6 +64,10 @@ Today Rise120 only **looks products up and shows them with their source, never s
 
 I have kept the app on option A. Tell me which option you choose; for B or C I will write the failing offline-replay tests first, keep the rows isolated and auditable by source id, and add the attribution text, but only after your decision.
 
+## Recipes (Milestone D1)
+
+The recipe schema, validator, read model and database rules are built (see `recipes.md`). They hold no data: every recipe needs the same review and rights evidence as a curated food, plus ingredient tags and Malay and Tamil text. Nothing from this file's candidate list has been turned into a recipe.
+
 ## What closes the gate
 
 Phase 3 is not complete until: a reviewed, rights-cleared seed is approved and deployed; the Open Food Facts reuse decision is made; and the final cross-phase phone checks pass.
