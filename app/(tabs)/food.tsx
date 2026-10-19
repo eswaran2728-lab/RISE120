@@ -176,6 +176,9 @@ function FoodScreen() {
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>{t('food.title')}</Text>
       <Text style={styles.meta}>{date}</Text>
+      <TouchableOpacity testID="food-open-planner" accessibilityRole="button" style={styles.addButton} onPress={() => router.push('/meal-planner' as Href)}>
+        <Text style={styles.addText}>{t('planner.open')}</Text>
+      </TouchableOpacity>
 
       <View style={styles.card}>
         <View style={styles.summaryRow}>
