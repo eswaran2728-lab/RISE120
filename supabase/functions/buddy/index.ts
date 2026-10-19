@@ -29,6 +29,10 @@ const ERRORS: Record<string, number> = {
   GROUP_FULL: 409,
   ALREADY_MEMBER: 409,
   INVALID_TARGET: 409,
+  MILESTONE_NOT_EARNED: 409,
+  SHARE_WITHDRAWN: 409,
+  SHARE_NOT_FOUND: 404,
+  REPORTING_UNAVAILABLE: 503,
 };
 
 function failure(message: string | undefined): Response {
@@ -96,6 +100,43 @@ Deno.serve(async (req) => {
     case 'block_member': {
       const { error } = await admin.rpc('buddy_block_member', { p_user_id: userId, p_group_id: request.groupId, p_member_id: request.memberId });
       return error ? failure(error.message) : json({ blocked: true }, 200);
+    }
+    case 'milestones': {
+      const { data, error } = await admin.rpc('buddy_milestones', { p_user_id: userId });
+      if (error) return failure(error.message);
+      const rows = (data ?? []) as { result_days: number; result_milestone: number | null; result_shared_in: string[] }[];
+      return json({ days: rows[0]?.result_days ?? 0, milestones: rows.filter((r) => r.result_milestone !== null).map((r) => ({ milestone: r.result_milestone, sharedIn: r.result_shared_in })) }, 200);
+    }
+    case 'share_milestone': {
+      const { error } = await admin.rpc('buddy_share_milestone', { p_user_id: userId, p_group_id: request.groupId, p_milestone: request.milestone, p_request_id: request.requestId });
+      return error ? failure(error.message) : json({ shared: true }, 200);
+    }
+    case 'withdraw_share': {
+      const { error } = await admin.rpc('buddy_withdraw_share', { p_user_id: userId, p_group_id: request.groupId, p_milestone: request.milestone });
+      return error ? failure(error.message) : json({ withdrawn: true }, 200);
+    }
+    case 'shares': {
+      const { data, error } = await admin.rpc('buddy_group_shares', { p_user_id: userId, p_group_id: request.groupId });
+      if (error) return failure(error.message);
+      // Only these five fields are ever returned.
+      const shares = (data ?? []).map((row: { result_member_id: string; result_display_name: string; result_milestone: number; result_shared_at: string; result_mine: boolean }) => ({
+        memberId: row.result_member_id,
+        displayName: row.result_display_name,
+        milestone: row.result_milestone,
+        sharedAt: row.result_shared_at,
+        mine: row.result_mine,
+      }));
+      return json({ shares }, 200);
+    }
+    case 'reports_status': {
+      const { data, error } = await admin.rpc('buddy_reports_open');
+      return error ? failure(error.message) : json({ open: data === true }, 200);
+    }
+    case 'report': {
+      const { data, error } = await admin.rpc('buddy_submit_report', { p_user_id: userId, p_group_id: request.groupId, p_member_id: request.memberId, p_reason: request.reason, p_note: request.note, p_request_id: request.requestId });
+      if (error) return failure(error.message);
+      const row = data?.[0];
+      return row ? json({ reportId: row.result_report_id, receivedAt: row.result_received_at }, 200) : json({ error: 'Could not complete that' }, 500);
     }
     case 'summary': {
       const { data, error } = await admin.rpc('buddy_summary', { p_user_id: userId, p_group_id: request.groupId, p_from: request.from, p_to: request.to });

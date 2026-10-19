@@ -1,4 +1,4 @@
-import { acceptInvite, blockMember, createGroup, createInvite, groupSummary, leaveGroup, listGroups, removeMember, revokeInvite, DISCLOSURE_VERSION } from '../api';
+import { getMilestones, groupShares, reportsOpen, shareMilestone, submitReport, withdrawShare, acceptInvite, blockMember, createGroup, createInvite, groupSummary, leaveGroup, listGroups, removeMember, revokeInvite, DISCLOSURE_VERSION } from '../api';
 import { supabase } from '../../lib/supabase';
 
 jest.mock('../../lib/supabase', () => ({ supabase: { functions: { invoke: jest.fn() }, from: jest.fn(), rpc: jest.fn() } }));
@@ -115,5 +115,88 @@ describe('listGroups', () => {
     (supabase.rpc as jest.Mock).mockResolvedValue({ data: null, error: { message: 'offline' } });
 
     expect(await listGroups()).toBeNull();
+  });
+});
+
+const REQUEST = '7a2b8c1e-1111-4222-8333-444455556667';
+
+describe('milestones and shares', () => {
+  it('asks for the own milestones of the signed-in member, with no account id', async () => {
+    invoke.mockResolvedValue({ data: { days: 9, milestones: [{ milestone: 7, sharedIn: [GROUP], extra: 'x' }], token: 'leak' }, error: null });
+
+    const result = await getMilestones();
+
+    expect(invoke).toHaveBeenCalledWith('buddy', { method: 'POST', body: { action: 'milestones' } });
+    expect(result).toEqual({ kind: 'ok', days: 9, milestones: [{ milestone: 7, sharedIn: [GROUP] }] });
+  });
+
+  it('sends a share with its request id, and a withdrawal with the group and milestone only', async () => {
+    invoke.mockResolvedValue({ data: { shared: true }, error: null });
+
+    expect(await shareMilestone({ groupId: GROUP, milestone: 7, requestId: REQUEST })).toEqual({ kind: 'ok' });
+    await withdrawShare(GROUP, 7);
+
+    expect(invoke.mock.calls.map((c) => c[1].body)).toEqual([
+      { action: 'share_milestone', groupId: GROUP, milestone: 7, requestId: REQUEST },
+      { action: 'withdraw_share', groupId: GROUP, milestone: 7 },
+    ]);
+  });
+
+  it('keeps only name, number, time and ownership of a share, whatever else a response carries', async () => {
+    invoke.mockResolvedValue({ data: { shares: [{ memberId: MEMBER, displayName: 'Alex', milestone: 7, sharedAt: '2026-10-19T00:00:00Z', mine: false, weight: 70, userId: 'u1', photo: 'p' }] }, error: null });
+
+    const result = await groupShares(GROUP);
+
+    expect(result).toEqual({ kind: 'ok', shares: [{ memberId: MEMBER, displayName: 'Alex', milestone: 7, sharedAt: '2026-10-19T00:00:00Z', mine: false }] });
+  });
+
+  it.each([
+    ['MILESTONE_NOT_EARNED', 409, 'milestone_not_earned'],
+    ['SHARE_WITHDRAWN', 409, 'share_withdrawn'],
+    ['SHARE_NOT_FOUND', 404, 'not_found'],
+    ['GROUP_NOT_FOUND', 404, 'not_found'],
+  ])('maps %s to %s', async (code, status, kind) => {
+    invoke.mockResolvedValue({ data: null, error: httpError(status, { error: code }) });
+
+    expect(await shareMilestone({ groupId: GROUP, milestone: 7, requestId: REQUEST })).toEqual({ kind });
+  });
+
+  it('says it is offline when the server cannot be reached', async () => {
+    invoke.mockResolvedValue({ data: null, error: { name: 'FunctionsFetchError' } });
+
+    expect(await groupShares(GROUP)).toEqual({ kind: 'offline' });
+  });
+});
+
+describe('reports', () => {
+  it('treats reporting as closed unless the server says it is open, and when it cannot tell', async () => {
+    invoke.mockResolvedValueOnce({ data: { open: true }, error: null });
+    invoke.mockResolvedValueOnce({ data: { open: 'yes' }, error: null });
+    invoke.mockResolvedValueOnce({ data: null, error: { name: 'FunctionsFetchError' } });
+
+    expect(await reportsOpen()).toBe(true);
+    expect(await reportsOpen()).toBe(false);
+    expect(await reportsOpen()).toBe(false);
+  });
+
+  it('sends a report with its request id and reason, and returns only the acknowledgement', async () => {
+    invoke.mockResolvedValue({ data: { reportId: 'r1', receivedAt: '2026-10-19T00:00:00Z', reporter: 'leak' }, error: null });
+
+    const result = await submitReport({ groupId: GROUP, memberId: MEMBER, reason: 'harassment', note: 'Hi', requestId: REQUEST });
+
+    expect(invoke).toHaveBeenCalledWith('buddy', { method: 'POST', body: { action: 'report', groupId: GROUP, memberId: MEMBER, reason: 'harassment', note: 'Hi', requestId: REQUEST } });
+    expect(result).toEqual({ kind: 'ok', reportId: 'r1', receivedAt: '2026-10-19T00:00:00Z' });
+  });
+
+  it('says reporting is unavailable when the server says it is not open', async () => {
+    invoke.mockResolvedValue({ data: null, error: httpError(503, { error: 'REPORTING_UNAVAILABLE' }) });
+
+    expect(await submitReport({ groupId: GROUP, memberId: MEMBER, reason: 'spam', note: null, requestId: REQUEST })).toEqual({ kind: 'reporting_unavailable' });
+  });
+
+  it('is an error, not an acknowledgement, when the answer has no report id', async () => {
+    invoke.mockResolvedValue({ data: {}, error: null });
+
+    expect(await submitReport({ groupId: GROUP, memberId: MEMBER, reason: 'spam', note: null, requestId: REQUEST })).toEqual({ kind: 'error' });
   });
 });

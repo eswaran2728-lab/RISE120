@@ -7,28 +7,18 @@ import { tokens } from '../src/theme/tokens';
 import { withAccountKey } from '../src/auth/withAccountKey';
 import { addLocalDays } from '../src/lib/dates';
 import { useLocalDate } from '../src/lib/useLocalDate';
-import { acceptInvite, blockMember, createGroup, createInvite, groupSummary, leaveGroup, listGroups, removeMember } from '../src/buddy/api';
+import { acceptInvite, blockMember, createGroup, createInvite, getMilestones, groupSummary, leaveGroup, listGroups, removeMember, reportsOpen } from '../src/buddy/api';
+import { GroupMilestones } from '../src/buddy/GroupMilestones';
+import { MESSAGE } from '../src/buddy/messages';
+import { ReportMember } from '../src/buddy/ReportMember';
 import { participationScore, rankMembers } from '../src/buddy/score';
-import type { BuddyFailure, BuddyGroup, MemberDays } from '../src/buddy/types';
+import type { BuddyGroup, MemberDays, Milestone } from '../src/buddy/types';
 import { ActionButton } from '../src/ui/ActionButton';
 import { AsyncState } from '../src/ui/AsyncState';
 import { ScreenFrame } from '../src/ui/ScreenFrame';
 import { SectionCard } from '../src/ui/SectionCard';
 
-type Loaded = { state: 'loading' } | { state: 'error' } | { state: 'ready'; groups: BuddyGroup[]; days: Record<string, MemberDays[] | null> };
-
-const MESSAGE: Record<BuddyFailure['kind'], string> = {
-  invite_unavailable: 'buddy.inviteUnavailable',
-  group_full: 'buddy.groupFull',
-  already_member: 'buddy.alreadyMember',
-  limit_reached: 'buddy.limitReached',
-  offline: 'buddy.offline',
-  not_found: 'buddy.error',
-  not_owner: 'buddy.error',
-  disclosure_required: 'buddy.needDisclosure',
-  invalid: 'buddy.error',
-  error: 'buddy.error',
-};
+type Loaded = { state: 'loading' } | { state: 'error' } | { state: 'ready'; groups: BuddyGroup[]; days: Record<string, MemberDays[] | null>; milestones: Milestone[] | null; reporting: boolean };
 
 // Private groups. A member sees display names and the days each logged a workout; the screen holds no account id,
 // weight, photo or meal. Anything that removes someone (leave, block, remove) asks first.
@@ -55,11 +45,15 @@ function BuddyScreen() {
     const groups = await listGroups();
     if (!alive.current) return;
     if (!groups) return setLoaded({ state: 'error' });
-    const results = await Promise.all(groups.map((g) => groupSummary(g.id, from, today)));
+    const [results, earned, reporting] = await Promise.all([
+      Promise.all(groups.map((g) => groupSummary(g.id, from, today))),
+      getMilestones().catch(() => ({ kind: 'offline' as const })),
+      reportsOpen().catch(() => false),
+    ]);
     if (!alive.current) return;
     const days: Record<string, MemberDays[] | null> = {};
     groups.forEach((g, i) => (days[g.id] = results[i].kind === 'ok' ? (results[i] as { members: MemberDays[] }).members : null));
-    setLoaded({ state: 'ready', groups, days });
+    setLoaded({ state: 'ready', groups, days, milestones: earned.kind === 'ok' ? earned.milestones : null, reporting });
   }, [from, today]);
 
   useFocusEffect(
@@ -127,6 +121,7 @@ function BuddyScreen() {
                   <Text key={m.memberId} style={styles.body}>{t('buddy.rank', { rank: m.rank, name: m.displayName, count: m.score })}</Text>
                 ))}
                 <Text style={styles.note}>{t('buddy.rankingNote')}</Text>
+                <Text style={styles.note}>{t('buddy.rankingTies')}</Text>
               </>
             ) : (
               members.map((m) => (
@@ -142,6 +137,7 @@ function BuddyScreen() {
                 <View key={member.memberId} style={styles.memberRow}>
                   <Text style={styles.body}>{member.displayName}</Text>
                   <ActionButton testID={`buddy-block-${member.memberId}`} variant="link" label={t('buddy.block')} onPress={() => setConfirming(blockKey)} />
+                  <ReportMember groupId={group.id} member={member} open={loaded.reporting} />
                   {confirming === blockKey ? (
                     <ActionButton testID={`buddy-block-confirm-${member.memberId}`} variant="danger" label={t('buddy.blockConfirm')} onPress={() => run(blockKey, () => blockMember(group.id, member.memberId))} />
                   ) : null}
@@ -152,6 +148,8 @@ function BuddyScreen() {
                 </View>
               );
             })}
+
+            <GroupMilestones group={group} milestones={loaded.milestones} />
 
             {owner ? <ActionButton testID={`buddy-invite-${group.id}`} variant="secondary" label={t('buddy.invite')} onPress={() => makeInvite(group.id)} /> : null}
             {invite?.groupId === group.id ? (

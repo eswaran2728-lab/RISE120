@@ -53,6 +53,14 @@ describe('rankMembers', () => {
     expect(two).toEqual(one);
   });
 
+  it('orders tied members by name without regard to capital letters, then by member id, so a tie reads the same everywhere', () => {
+    const ranked = rankMembers([member('z', 'zed', ['2026-10-12']), member('b', 'Bob', ['2026-10-12']), member('a2', 'bob', ['2026-10-12']), member('a1', 'alice', ['2026-10-12'])], FROM, TO);
+
+    expect(ranked.map((r) => r.displayName)).toEqual(['alice', 'Bob', 'bob', 'zed']);
+    expect(ranked.map((r) => r.rank)).toEqual([1, 1, 1, 1]);
+    expect(ranked[1].memberId).toBe('b'); // same name apart from capitals: the member id decides, always the same way
+  });
+
   it('is empty for no members, and everyone is rank 1 when nobody logged anything', () => {
     expect(rankMembers([], FROM, TO)).toEqual([]);
     expect(rankMembers([member('a', 'Alex', []), member('b', 'Sam', [])], FROM, TO).map((r) => r.rank)).toEqual([1, 1]);

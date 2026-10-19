@@ -27,6 +27,26 @@ export type BuddyFailure =
   | { kind: 'limit_reached' }
   | { kind: 'already_member' }
   | { kind: 'disclosure_required' }
+  | { kind: 'milestone_not_earned' }
+  | { kind: 'share_withdrawn' }
+  | { kind: 'reporting_unavailable' }
   | { kind: 'invalid' }
   | { kind: 'offline' }
   | { kind: 'error' };
+
+// A completion milestone: "N workout days". `sharedIn` lists the member's groups it is currently shared into.
+export interface Milestone {
+  milestone: number;
+  sharedIn: string[];
+}
+
+// What a group sees of a share: a name and a number. Nothing else ever appears here.
+export interface GroupShare {
+  memberId: string;
+  displayName: string;
+  milestone: number;
+  sharedAt: string;
+  mine: boolean;
+}
+
+export type ReportReason = 'harassment' | 'spam' | 'unsafe' | 'other';

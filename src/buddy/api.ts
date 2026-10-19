@@ -1,7 +1,7 @@
 // The app's only contact with buddy groups: one server function and the member's own readable rows. The server
 // decides who may see what; the app never sends an account id.
 import { supabase } from '../lib/supabase';
-import type { BuddyFailure, BuddyGroup, BuddyMember, MemberDays } from './types';
+import type { BuddyFailure, BuddyGroup, BuddyMember, GroupShare, MemberDays, Milestone, ReportReason } from './types';
 
 // The disclosure version this build shows. The server rejects any other, so an out-of-date app cannot record
 // consent to text it did not show.
@@ -18,6 +18,10 @@ const KINDS: Record<string, BuddyFailure['kind']> = {
   GROUP_FULL: 'group_full',
   LIMIT_REACHED: 'limit_reached',
   ALREADY_MEMBER: 'already_member',
+  MILESTONE_NOT_EARNED: 'milestone_not_earned',
+  SHARE_WITHDRAWN: 'share_withdrawn',
+  SHARE_NOT_FOUND: 'not_found',
+  REPORTING_UNAVAILABLE: 'reporting_unavailable',
   INVALID_TARGET: 'invalid',
 };
 
@@ -75,6 +79,44 @@ export async function groupSummary(groupId: string, from: string, to: string): P
   // Only these three fields are kept, whatever else a response might carry.
   const members = raw.map((m) => ({ memberId: String(m.memberId), displayName: String(m.displayName), days: Array.isArray(m.days) ? (m.days as unknown[]).map(String) : [] }));
   return { kind: 'ok', members };
+}
+
+// The member's completion milestones, computed by the server from distinct workout days (one point for each local day).
+export async function getMilestones(): Promise<Ok<{ days: number; milestones: Milestone[] }> | BuddyFailure> {
+  const result = await call({ action: 'milestones' });
+  if (!result.ok) return result.failure;
+  const raw = Array.isArray(result.data.milestones) ? (result.data.milestones as Record<string, unknown>[]) : [];
+  return {
+    kind: 'ok',
+    days: Number(result.data.days) || 0,
+    milestones: raw.map((m) => ({ milestone: Number(m.milestone), sharedIn: Array.isArray(m.sharedIn) ? (m.sharedIn as unknown[]).map(String) : [] })),
+  };
+}
+
+// Only ever called after the member has confirmed a preview. The request id stays the same for a retry, and the server
+// remembers it, so a late repeat of a withdrawn share cannot bring it back.
+export const shareMilestone = (input: { groupId: string; milestone: number; requestId: string }) => simple({ action: 'share_milestone', ...input });
+export const withdrawShare = (groupId: string, milestone: number) => simple({ action: 'withdraw_share', groupId, milestone });
+
+export async function groupShares(groupId: string): Promise<Ok<{ shares: GroupShare[] }> | BuddyFailure> {
+  const result = await call({ action: 'shares', groupId });
+  if (!result.ok) return result.failure;
+  const raw = Array.isArray(result.data.shares) ? (result.data.shares as Record<string, unknown>[]) : [];
+  // Only these five fields are kept, whatever else a response might carry.
+  return { kind: 'ok', shares: raw.map((s) => ({ memberId: String(s.memberId), displayName: String(s.displayName), milestone: Number(s.milestone), sharedAt: String(s.sharedAt), mine: s.mine === true })) };
+}
+
+// Reporting is open only when the server says so (it needs a named moderator). Anything else counts as closed.
+export async function reportsOpen(): Promise<boolean> {
+  const result = await call({ action: 'reports_status' });
+  return result.ok && result.data.open === true;
+}
+
+export async function submitReport(input: { groupId: string; memberId: string; reason: ReportReason; note: string | null; requestId: string }): Promise<Ok<{ reportId: string; receivedAt: string }> | BuddyFailure> {
+  const result = await call({ action: 'report', ...input });
+  if (!result.ok) return result.failure;
+  const { reportId, receivedAt } = result.data;
+  return typeof reportId === 'string' && typeof receivedAt === 'string' ? { kind: 'ok', reportId, receivedAt } : { kind: 'error' };
 }
 
 // The member's own groups and member lists, read under row-level security and the column grants (so only a

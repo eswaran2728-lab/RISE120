@@ -21,10 +21,20 @@ export interface RankedMember {
   rank: number;
 }
 
+// Tied members read the same everywhere: by name without regard to capital letters, then by exact name, then by the
+// member id (random, but always the same one), so the list never shuffles between refreshes or phones.
+const compareNames = (a: { displayName: string; memberId: string }, b: { displayName: string; memberId: string }) => {
+  const x = a.displayName.toLowerCase();
+  const y = b.displayName.toLowerCase();
+  if (x !== y) return x < y ? -1 : 1;
+  if (a.displayName !== b.displayName) return a.displayName < b.displayName ? -1 : 1;
+  return a.memberId < b.memberId ? -1 : a.memberId > b.memberId ? 1 : 0;
+};
+
 export function rankMembers(members: MemberDays[], from: string, to: string): RankedMember[] {
   const scored = members
     .map((m) => ({ memberId: m.memberId, displayName: m.displayName, score: participationScore(m.days, from, to) }))
-    .sort((a, b) => b.score - a.score || (a.displayName < b.displayName ? -1 : a.displayName > b.displayName ? 1 : a.memberId < b.memberId ? -1 : 1));
+    .sort((a, b) => b.score - a.score || compareNames(a, b));
   return scored.map((m, index) => ({ ...m, rank: index > 0 && scored[index - 1].score === m.score ? 0 : index + 1 })).reduce<RankedMember[]>((out, m) => {
     out.push({ ...m, rank: m.rank === 0 ? out[out.length - 1].rank : m.rank });
     return out;
