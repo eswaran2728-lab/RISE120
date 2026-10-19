@@ -2,9 +2,10 @@ import { createImportDb } from '../../../scripts/training-content/importDb';
 
 type Call = { table: string; op: string; args: unknown[] };
 
-// A stand-in shaped like the supabase-js client: records which tables are read and written.
-function fakeClient(rows: Record<string, unknown[]>) {
+// A stand-in shaped like the supabase-js client: records which tables are read and which functions are called.
+function fakeClient(rows: Record<string, unknown[]>, rpcAnswer: { data?: unknown; error?: { message: string } | null } = { data: { inserted: 5, updated: 0, skipped: 0 }, error: null }) {
   const calls: Call[] = [];
+  const rpcCalls: { name: string; args: unknown }[] = [];
   const client = {
     from: (table: string) => {
       const query: Record<string, unknown> = {};
@@ -20,12 +21,18 @@ function fakeClient(rows: Record<string, unknown[]>) {
       query.then = (resolve: (v: unknown) => unknown) => resolve({ data: rows[table] ?? [], error: null });
       return query;
     },
+    rpc: (name: string, args: unknown) => {
+      rpcCalls.push({ name, args });
+      return Promise.resolve(rpcAnswer);
+    },
   };
-  return { client, calls };
+  return { client, calls, rpcCalls };
 }
 
+const plan = { ops: [{ kind: 'insert' as const, table: 'exercise_versions' as const, key: 'a@1', row: { id: 'a', version: 1 } }], unchanged: 0, hash: 'f'.repeat(64) };
+
 describe('createImportDb', () => {
-  it('reads the three catalogue tables and the ids of public.exercises, and nothing else', async () => {
+  it('reads the three catalogue tables and the ids of public.exercises, and never writes with table calls', async () => {
     const { client, calls } = fakeClient({ exercise_versions: [{ id: 'a' }], session_templates: [], exercise_links: [{ catalogue_id: 'a', exercise_id: 'u' }], exercises: [{ id: 'u1' }, { id: 'u2' }] });
 
     const state = await createImportDb(client as never).read();
@@ -36,22 +43,31 @@ describe('createImportDb', () => {
     expect([...new Set(calls.map((c) => c.table))].sort()).toEqual(['exercise_links', 'exercise_versions', 'exercises', 'session_templates']);
   });
 
-  it('writes only to the catalogue tables, and refuses any other table', async () => {
-    const { client, calls } = fakeClient({});
-    const db = createImportDb(client as never);
+  it('applies a plan with exactly ONE call to the single import function, and makes no other write', async () => {
+    const { client, calls, rpcCalls } = fakeClient({});
 
-    await db.insert('exercise_versions', { id: 'a', version: 1 });
-    await db.update('session_templates', { id: 's', version: 1 }, { status: 'published' });
-    await db.remove('exercise_links', { catalogue_id: 'a' });
+    const result = await createImportDb(client as never).applyPlan(plan);
 
-    expect(calls.filter((c) => c.op !== 'select' && c.op !== 'eq').map((c) => `${c.op} ${c.table}`)).toEqual(['insert exercise_versions', 'update session_templates', 'delete exercise_links']);
-    await expect(db.insert('workout_logs' as never, {})).rejects.toThrow(/table/i);
-    await expect(db.remove('exercises' as never, { id: 'x' })).rejects.toThrow(/table/i);
+    expect(rpcCalls).toEqual([{ name: 'import_guided_catalogue', args: { p_ops: [{ kind: 'insert', table: 'exercise_versions', row: { id: 'a', version: 1 }, previous: undefined }], p_plan_hash: plan.hash } }]);
+    expect(calls).toEqual([]);
+    expect(result).toEqual({ inserted: 5, updated: 0, skipped: 0 });
+  });
+
+  it('has no row-by-row write methods at all', () => {
+    const db = createImportDb(fakeClient({}).client as never);
+
+    expect(Object.keys(db).sort()).toEqual(['applyPlan', 'read']);
   });
 
   it('surfaces a database error instead of continuing', async () => {
-    const failing = { from: () => ({ insert: () => ({ then: (resolve: (v: unknown) => unknown) => resolve({ error: { message: 'boom' } }) }) }) };
+    const { client } = fakeClient({}, { data: null, error: { message: 'PLAN_STALE: changed' } });
 
-    await expect(createImportDb(failing as never).insert('exercise_versions', {})).rejects.toThrow('boom');
+    await expect(createImportDb(client as never).applyPlan(plan)).rejects.toThrow('PLAN_STALE');
+  });
+
+  it('refuses an answer it cannot read', async () => {
+    const { client } = fakeClient({}, { data: { inserted: 'many' }, error: null });
+
+    await expect(createImportDb(client as never).applyPlan(plan)).rejects.toThrow(/answer/i);
   });
 });

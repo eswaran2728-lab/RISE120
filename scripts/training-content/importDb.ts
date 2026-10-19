@@ -1,14 +1,9 @@
-// The supabase-js side of the import: reads the three catalogue tables (and only the ids of public.exercises) and
-// writes only to those three tables. Any other table name is refused, so this adapter cannot touch logged sets or the
-// exercises table even by mistake. The client is created by the caller with the development project's service key.
+// The supabase-js side of the import. It reads the three catalogue tables (and only the ids of public.exercises) and
+// applies a plan with ONE call to the service-role-only database function import_guided_catalogue, which runs the
+// whole plan in a single transaction. There is no method that writes a row on its own, so this adapter cannot leave a
+// partial publication or touch logged sets. The client is created by the caller with the development project's key.
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { ExistingState, ImportDb, Row, Table } from './import.ts';
-
-const WRITABLE: Table[] = ['exercise_versions', 'session_templates', 'exercise_links'];
-
-function assertWritable(table: string): asserts table is Table {
-  if (!WRITABLE.includes(table as Table)) throw new Error(`Refusing to write to table "${table}": the import may only write ${WRITABLE.join(', ')}.`);
-}
+import type { ApplyResult, ExistingState, ImportDb, Plan, Row } from './import.ts';
 
 function check(error: { message: string } | null | undefined): void {
   if (error) throw new Error(error.message);
@@ -30,21 +25,15 @@ export function createImportDb(client: SupabaseClient): ImportDb {
       ]);
       return { exerciseVersions, sessionTemplates, links: links as ExistingState['links'], exerciseIds: exercises.map((r) => String(r.id)) };
     },
-    async insert(table, row) {
-      assertWritable(table);
-      check((await client.from(table).insert(row)).error);
-    },
-    async update(table, key, patch) {
-      assertWritable(table);
-      let query = client.from(table).update(patch);
-      for (const [column, value] of Object.entries(key)) query = query.eq(column, value as never);
-      check((await query).error);
-    },
-    async remove(table, key) {
-      assertWritable(table);
-      let query = client.from(table).delete();
-      for (const [column, value] of Object.entries(key)) query = query.eq(column, value as never);
-      check((await query).error);
+    async applyPlan(plan: Plan): Promise<ApplyResult> {
+      const { data, error } = await client.rpc('import_guided_catalogue', {
+        p_ops: plan.ops.map(({ kind, table, row, previous }) => ({ kind, table, row, previous })),
+        p_plan_hash: plan.hash,
+      });
+      check(error);
+      const answer = data as Partial<ApplyResult> | null;
+      if (!answer || typeof answer.inserted !== 'number' || typeof answer.updated !== 'number' || typeof answer.skipped !== 'number') throw new Error('The database gave an answer the import could not read.');
+      return { inserted: answer.inserted, updated: answer.updated, skipped: answer.skipped };
     },
   };
 }

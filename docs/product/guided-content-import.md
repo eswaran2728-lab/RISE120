@@ -42,10 +42,10 @@ npm run content:import -- --mapping <file> --apply --plan-hash <hash> --project-
 
 - Only the development project: the ref, the linked project in `supabase/.temp/project-ref`, the host of `SUPABASE_URL`, and the typed confirmation must all be `kozskxoiyrzrokjmcqeo`. Otherwise nothing is read or written.
 - Writes exactly the dry-run plan: the hash must match what is in the database now. If the database changed, run the dry run again.
-- Idempotent: items already identical are skipped; running it again writes nothing. An existing unpublished row becomes an update, never a duplicate.
-- Writes only `exercise_versions`, `session_templates` and `exercise_links`. It never writes `workout_logs` or `exercises`, so logged sets are untouched.
-- If a step fails, the writes already made are undone (inserts removed, updates restored) and the original error is reported. This is compensating undo, not a database transaction: a crash of the tool itself between steps could leave partial rows, and re-running the dry run will show them.
-- `published_at` is not set by the tool.
+- **One atomic call.** Apply sends the whole plan to a single service-role-only database function, `import_guided_catalogue` (migration `20261019063238`), which runs it in **one transaction**: every write or none. A crash of the tool, a lost connection, a constraint failure or a concurrent change cannot leave a partial publication, and there is no undo step because there is nothing to undo.
+- **Rechecked inside the transaction.** The function takes a lock and rechecks every step against the rows as they are at that moment: an insert needs the row to be absent (or already identical); an update needs the stored row to still equal what the dry run saw and not yet be published; a link needs to be absent or identical. Otherwise it raises `PLAN_STALE`, nothing is written, and the tool tells you to run the dry run again.
+- **Narrow.** It writes only `exercise_versions`, `session_templates` and `exercise_links`; any other table, an unknown operation, or a row that is not `published` is refused (`INVALID_PLAN`). It never touches `workout_logs` or `exercises`. Members and signed-out callers cannot call it.
+- **Idempotent, with correct `published_at`.** Items already identical are skipped and their `published_at` is never rewritten. When an item first becomes published, `published_at` is set from the database clock (one value for the whole import); an existing `published_at` on a draft being published is kept.
 
 ## Still blocking the real pack
 

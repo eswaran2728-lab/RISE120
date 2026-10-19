@@ -1,11 +1,12 @@
 // Imports APPROVED guided-workout content into the Rise120 development database. Dry-run first:
 //   buildImportPlan(...)  decides what would be written, or why nothing may be, and writes nothing;
 //   renderPlan(...)       shows exactly what that is, with a hash that identifies it;
-//   applyImport(...)      writes only that exact plan, only to the confirmed development project, and undoes its own
-//                         writes if any step fails.
+//   applyImport(...)      sends only that exact plan, only to the confirmed development project, as one atomic call.
 // It refuses drafts and anything without review and media evidence, and it never matches an exercise to the logged-set
 // table (public.exercises) by name: every link must come from an explicitly reviewed mapping. It writes only
 // exercise_versions, session_templates and exercise_links, and never touches logged sets or public.exercises.
+// Applying is ONE database call (a single transaction in the database): every write or none, rechecked against the
+// current rows inside that transaction, so a crash or a concurrent change cannot leave a partial publication.
 import { createHash } from 'node:crypto';
 import { CatalogueInput, ExerciseVersion, SessionTemplate, validateCatalogue } from '../../src/workout/catalogue.ts';
 
@@ -49,11 +50,16 @@ export interface Plan {
   hash: string;
 }
 
+export interface ApplyResult {
+  inserted: number;
+  updated: number;
+  skipped: number;
+}
+
+// The database offers reading and ONE atomic apply. There is deliberately no way to write a row at a time.
 export interface ImportDb {
   read(): Promise<ExistingState>;
-  insert(table: Table, row: Row): Promise<void>;
-  update(table: Table, key: Row, patch: Row): Promise<void>;
-  remove(table: Table, key: Row): Promise<void>;
+  applyPlan(plan: Plan): Promise<ApplyResult>;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -189,8 +195,6 @@ function assertDevelopmentProject(guard: ApplyGuard): void {
   if (!ok) throw new Error(`Refusing to write: this is not the confirmed Rise120 development project (${DEV_PROJECT_REF}).`);
 }
 
-const keyOf = (op: Op): Row => (op.table === 'exercise_links' ? { catalogue_id: op.row.catalogue_id } : { id: op.row.id, version: op.row.version });
-
 export async function applyImport(input: ImportInput, db: ImportDb, guard: ApplyGuard): Promise<{ applied: number; hash: string }> {
   assertDevelopmentProject(guard);
   const { refusals, plan } = buildImportPlan(input, await db.read());
@@ -198,23 +202,12 @@ export async function applyImport(input: ImportInput, db: ImportDb, guard: Apply
   if (plan.ops.length === 0) return { applied: 0, hash: plan.hash };
   if (!guard.planHash || guard.planHash !== plan.hash) throw new Error('The plan hash does not match what is in the database now. Run the dry run again and approve that plan.');
 
-  const done: Op[] = [];
   try {
-    for (const op of plan.ops) {
-      if (op.kind === 'insert') await db.insert(op.table, op.row);
-      else await db.update(op.table, keyOf(op), op.row);
-      done.push(op);
-    }
+    const result = await db.applyPlan(plan);
+    return { applied: result.inserted + result.updated, hash: plan.hash };
   } catch (error) {
-    for (const op of [...done].reverse()) {
-      try {
-        if (op.kind === 'insert') await db.remove(op.table, keyOf(op));
-        else await db.update(op.table, keyOf(op), op.previous ?? {});
-      } catch {
-        // Keep undoing the rest; the original failure is what gets reported.
-      }
-    }
+    const message = error instanceof Error ? error.message : '';
+    if (message.includes('PLAN_STALE')) throw new Error(`The database changed after the dry run (${message}). Nothing was written. Run the dry run again.`);
     throw error;
   }
-  return { applied: plan.ops.length, hash: plan.hash };
 }

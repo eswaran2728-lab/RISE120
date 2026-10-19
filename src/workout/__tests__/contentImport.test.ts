@@ -9,6 +9,7 @@ import {
   type ImportDb,
   type ImportInput,
   type Mapping,
+  type Plan,
   type Row,
 } from '../../../scripts/training-content/import';
 import type { ExerciseVersion, SessionTemplate } from '../catalogue';
@@ -202,51 +203,59 @@ describe('renderPlan (the dry run)', () => {
   });
 });
 
-// An in-memory stand-in for the database that records every write.
-function fakeDb(start: ExistingState, failAtWrite = Infinity) {
+// An in-memory stand-in for the database. Like the real one, it applies a whole plan in ONE call or not at all.
+function fakeDb(start: ExistingState, failure?: Error) {
   const state: ExistingState = JSON.parse(JSON.stringify(start));
   const tables = { workout_logs: [{ id: 'log-1', exercise_id: UA, reps: 10 }], exercises: [{ id: UA, name: 'Squat' }] };
-  const writes: string[] = [];
-  const tableOf = (t: string) => (t === 'exercise_versions' ? state.exerciseVersions : t === 'session_templates' ? state.sessionTemplates : state.links) as Row[];
-  const matches = (t: string, row: Row, key: Row) => (t === 'exercise_links' ? row.catalogue_id === key.catalogue_id : row.id === key.id && row.version === key.version);
-  const guard = (what: string) => {
-    writes.push(what);
-    if (writes.length === failAtWrite) throw new Error('simulated write failure');
-  };
+  const plans: Plan[] = [];
   const db: ImportDb = {
     read: async () => JSON.parse(JSON.stringify(state)),
-    insert: async (t, row) => { guard(`insert ${t}`); tableOf(t).push(JSON.parse(JSON.stringify(row))); },
-    update: async (t, key, patch) => { guard(`update ${t}`); const r = tableOf(t).find((x) => matches(t, x, key))!; Object.assign(r, JSON.parse(JSON.stringify(patch))); },
-    remove: async (t, key) => { const list = tableOf(t); const i = list.findIndex((x) => matches(t, x, key)); if (i >= 0) list.splice(i, 1); },
+    applyPlan: async (plan) => {
+      plans.push(plan);
+      if (failure) throw failure; // nothing is applied: the whole call is one transaction
+      for (const op of plan.ops) {
+        const list = (op.table === 'exercise_versions' ? state.exerciseVersions : op.table === 'session_templates' ? state.sessionTemplates : state.links) as Row[];
+        const i = list.findIndex((r) => (op.table === 'exercise_links' ? r.catalogue_id === op.row.catalogue_id : r.id === op.row.id && r.version === op.row.version));
+        if (i >= 0) Object.assign(list[i], JSON.parse(JSON.stringify(op.row)));
+        else list.push(JSON.parse(JSON.stringify(op.row)));
+      }
+      return { inserted: plan.ops.filter((o) => o.kind === 'insert').length, updated: plan.ops.filter((o) => o.kind === 'update').length, skipped: 0 };
+    },
   };
-  return { db, state, tables, writes };
+  return { db, state, tables, plans };
 }
 const guard = (over: Record<string, unknown> = {}) => ({ projectRef: DEV_PROJECT_REF, linkedProjectRef: DEV_PROJECT_REF, supabaseUrl: `https://${DEV_PROJECT_REF}.supabase.co`, confirmProject: DEV_PROJECT_REF, ...over });
 
 describe('applyImport', () => {
-  it('writes exactly the approved plan, then is a no-op the second time (idempotent)', async () => {
-    const { db, state, writes } = fakeDb(emptyState());
+  it('sends the whole approved plan to the database in ONE atomic call, then is a no-op the second time (replay)', async () => {
+    const { db, state, plans } = fakeDb(emptyState());
     const hash = buildImportPlan(input(), emptyState()).plan!.hash;
 
     const first = await applyImport(input(), db, { ...guard(), planHash: hash });
     const second = await applyImport(input(), db, { ...guard(), planHash: first.hash });
 
     expect(first.applied).toBe(5);
+    expect(plans).toHaveLength(1); // one request for all five writes; the replay sends nothing
+    expect(plans[0].ops).toHaveLength(5);
     expect(state.exerciseVersions).toHaveLength(2);
-    expect(state.sessionTemplates).toHaveLength(1);
     expect(state.links).toEqual([{ catalogue_id: 'a', exercise_id: UA }, { catalogue_id: 'b', exercise_id: UB }]);
     expect(second.applied).toBe(0);
-    expect(writes).toHaveLength(5);
   });
 
-  it('touches only the three catalogue tables: logged sets and the exercises table are never written', async () => {
-    const { db, tables, writes } = fakeDb(emptyState());
+  it('has no way to write one row at a time: the database interface offers only the atomic call', () => {
+    const { db } = fakeDb(emptyState());
+
+    expect(Object.keys(db).sort()).toEqual(['applyPlan', 'read']);
+  });
+
+  it('plans only the three catalogue tables: logged sets and the exercises table are never in the plan', async () => {
+    const { db, tables, plans } = fakeDb(emptyState());
     const before = JSON.stringify(tables);
 
     await applyImport(input(), db, { ...guard(), planHash: buildImportPlan(input(), emptyState()).plan!.hash });
 
     expect(JSON.stringify(tables)).toBe(before);
-    expect(writes.every((w) => /exercise_versions|session_templates|exercise_links/.test(w))).toBe(true);
+    expect(new Set(plans[0].ops.map((o) => o.table))).toEqual(new Set(['exercise_versions', 'session_templates', 'exercise_links']));
   });
 
   it.each([
@@ -255,48 +264,52 @@ describe('applyImport', () => {
     ['a different database url', { supabaseUrl: 'https://someotherprojectref.supabase.co' }],
     ['no confirmation of the project', { confirmProject: undefined }],
     ['the wrong confirmation', { confirmProject: 'yes' }],
-  ])('refuses before writing anything when given %s', async (_name, over) => {
-    const { db, writes } = fakeDb(emptyState());
+  ])('refuses before sending anything when given %s', async (_name, over) => {
+    const { db, plans } = fakeDb(emptyState());
 
     await expect(applyImport(input(), db, { ...guard(over), planHash: buildImportPlan(input(), emptyState()).plan!.hash })).rejects.toThrow(/project/i);
-    expect(writes).toEqual([]);
+    expect(plans).toEqual([]);
   });
 
   it('refuses a plan hash that is not the one shown in the dry run, or none', async () => {
-    const { db, writes } = fakeDb(emptyState());
+    const { db, plans } = fakeDb(emptyState());
 
     await expect(applyImport(input(), db, { ...guard(), planHash: 'deadbeef' })).rejects.toThrow(/hash/i);
     await expect(applyImport(input(), db, { ...guard() } as never)).rejects.toThrow(/hash/i);
-    expect(writes).toEqual([]);
+    expect(plans).toEqual([]);
   });
 
-  it('refuses to apply anything when the input has a refusal, such as a draft', async () => {
-    const { db, writes } = fakeDb(emptyState());
+  it('refuses to send anything when the input has a refusal, such as a draft', async () => {
+    const { db, plans } = fakeDb(emptyState());
     const drafts = input({ exercises: [ex('a', { alternatives: ['b'], status: 'draft' }), ex('b', { alternatives: ['a'] })] });
 
     await expect(applyImport(drafts, db, { ...guard(), planHash: 'x' })).rejects.toThrow(/refus/i);
-    expect(writes).toEqual([]);
+    expect(plans).toEqual([]);
   });
 
-  it('rolls back every earlier write when one fails, leaving the database as it was', async () => {
-    const start = emptyState({ exerciseVersions: [{ id: 'a', version: 1, status: 'draft', reviewer: null, media: null, pattern: 'squat', equipment: 'none', name: L('a'), cues: [], regressions: [], alternatives: [] }] });
-    const { db, state } = fakeDb(start, 4);
+  it('leaves the database unchanged and reports the error when the atomic call fails midway', async () => {
+    const { db, state, plans } = fakeDb(emptyState(), new Error('simulated failure inside the transaction'));
     const before = JSON.stringify(state);
-    const hash = buildImportPlan(input(), start).plan!.hash;
 
-    await expect(applyImport(input(), db, { ...guard(), planHash: hash })).rejects.toThrow(/simulated write failure/);
+    await expect(applyImport(input(), db, { ...guard(), planHash: buildImportPlan(input(), emptyState()).plan!.hash })).rejects.toThrow(/simulated failure/);
 
     expect(JSON.stringify(state)).toBe(before);
+    expect(plans).toHaveLength(1); // no second "undo" request: there is nothing to undo
   });
 
-  it('notices that the database changed since the dry run and refuses the stale plan', async () => {
-    const { db, writes } = fakeDb(emptyState());
+  it('turns a stale-plan answer from the database into a clear message: nothing was written, run the dry run again', async () => {
+    const { db } = fakeDb(emptyState(), new Error('PLAN_STALE: exercise_versions a@1 changed'));
+
+    await expect(applyImport(input(), db, { ...guard(), planHash: buildImportPlan(input(), emptyState()).plan!.hash })).rejects.toThrow(/changed after the dry run.*Nothing was written/is);
+  });
+
+  it('notices that the database changed since the dry run and refuses the stale plan before sending it', async () => {
+    const { db, state, plans } = fakeDb(emptyState());
     const hash = buildImportPlan(input(), emptyState()).plan!.hash;
-    await db.insert('exercise_links', { catalogue_id: 'a', exercise_id: UA });
-    writes.length = 0;
+    state.links.push({ catalogue_id: 'a', exercise_id: UA });
 
     await expect(applyImport(input(), db, { ...guard(), planHash: hash })).rejects.toThrow(/hash/i);
-    expect(writes).toEqual([]);
+    expect(plans).toEqual([]);
   });
 });
 
