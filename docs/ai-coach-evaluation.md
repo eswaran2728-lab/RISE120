@@ -119,6 +119,8 @@ A provider failure (timeout, HTTP error, unusable reply) is recorded as an error
 
 ## OmniRoute (candidate, not adopted)
 
+The 19 October 2026 documentation review and the go/no-go decision (no-go for member data, adapter deferred) are in `docs/omniroute-operations.md`.
+
 OmniRoute (https://github.com/diegosouzapw/OmniRoute) is a gateway that exposes many providers through an OpenAI-compatible API. If you run one yourself, point `EVAL_SECOND_BASE_URL` at it and the tool can score whichever model it routes to. **Nothing about OmniRoute was installed, deployed or assessed in this task.** Before using any gateway with member data decide, in writing: where it runs and who operates it; where prompts and replies are logged or retained; which upstream provider and paid terms apply to each request; whether failures are surfaced as failures (the coach must not auto-retry on an unknown outcome); and how its keys are stored. The coach keeps using Gemini until that review and a real comparison say otherwise.
 
 ## What remains before a real comparison
