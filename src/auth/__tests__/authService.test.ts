@@ -4,6 +4,7 @@ import { GoogleSignin } from '@react-native-google-signin/google-signin';
 import { loadDraft, saveDraft } from '../../onboarding/draft';
 import { enqueue, listPending } from '../../sync/queue';
 import { removeLocalPhotos } from '../../checkin/photos';
+import { removeFoodPhotos } from '../../food/photo/files';
 import { readCache, writeCache } from '../../cache/userCache';
 import { recentFoods, rememberFoods } from '../../food/cache';
 import { expoNotificationApi } from '../../notifications/expoApi';
@@ -16,6 +17,7 @@ jest.mock('../../notifications/expoApi', () => ({
   },
 }));
 jest.mock('../../checkin/photos', () => ({ removeLocalPhotos: jest.fn() }));
+jest.mock('../../food/photo/files', () => ({ removeFoodPhotos: jest.fn() }));
 
 jest.mock('@react-native-async-storage/async-storage', () =>
   jest.requireActual('@react-native-async-storage/async-storage/jest/async-storage-mock')
@@ -114,6 +116,30 @@ describe('authService', () => {
       await signOut();
 
       expect(supabase.auth.signOut).toHaveBeenCalled();
+    });
+
+    it('removes the local food photos of the signed-in account, and only theirs', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await signOut();
+
+      expect(removeFoodPhotos).toHaveBeenCalledTimes(1);
+      expect(removeFoodPhotos).toHaveBeenCalledWith('u1');
+    });
+
+    it('keeps the photos when sign-out fails, and still signs out if removing them throws', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: { message: 'offline' } });
+      await expect(signOut()).rejects.toThrow('offline');
+      expect(removeFoodPhotos).not.toHaveBeenCalled();
+
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+      (removeFoodPhotos as jest.Mock).mockImplementationOnce(() => {
+        throw new Error('disk error');
+      });
+      await expect(signOut()).resolves.toBeUndefined();
     });
 
     it('throws Error with message when signOut returns an error', async () => {
@@ -292,6 +318,16 @@ describe('authService', () => {
       await deleteAccount();
 
       expect(supabase.auth.signOut).toHaveBeenCalledWith({ scope: 'local' });
+    });
+
+    it('removes the local food photos of the deleted account too', async () => {
+      (supabase.auth.getSession as jest.Mock).mockResolvedValueOnce({ data: { session: { user: { id: 'u1' } } } });
+      (supabase.functions.invoke as jest.Mock).mockResolvedValueOnce({ data: { deleted: true }, error: null });
+      (supabase.auth.signOut as jest.Mock).mockResolvedValueOnce({ error: null });
+
+      await deleteAccount();
+
+      expect(removeFoodPhotos).toHaveBeenCalledWith('u1');
     });
 
     it('removes the deleted account unsynced local photos', async () => {

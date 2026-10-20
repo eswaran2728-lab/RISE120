@@ -36,7 +36,7 @@ export function recipeFoodId(userId: string, recipe: Recipe): string {
 }
 
 // The member's private, unverified food for this recipe version, carrying the recipe's source and version.
-function recipeFoodSnapshot(userId: string, recipe: Recipe, n: { calories: number; proteinG: number; carbsG: number; fatG: number }): Food {
+export function recipeFoodSnapshot(userId: string, recipe: Recipe, n: { calories: number; proteinG: number; carbsG: number; fatG: number }): Food {
   return {
     id: recipeFoodId(userId, recipe),
     userId,
@@ -55,12 +55,13 @@ function recipeFoodSnapshot(userId: string, recipe: Recipe, n: { calories: numbe
   };
 }
 
-export async function logPlannedMeal(
+// Queues a recipe's private food (first time on this phone) and then the food log, under the caller's log id. Used by the
+// meal planner (a planned meal's stable id) and the photo flow (the entry's id). Nothing needs a connection.
+export async function queueRecipeLog(
   userId: string,
   date: LocalDate,
-  input: { recipe: Recipe; servings: number; mealType: MealType; slotKey: string; confirmed: boolean }
-): Promise<PlannedLogResult> {
-  if (!input.confirmed) return { kind: 'not_confirmed' };
+  input: { recipe: Recipe; servings: number; mealType: MealType; logId: string }
+): Promise<{ kind: 'logged'; logId: string } | { kind: 'nutrition_unknown' }> {
   const n = input.recipe.nutrition?.perServing;
   if (!n || n.calories === null || n.proteinG === null || n.carbsG === null || n.fatG === null) return { kind: 'nutrition_unknown' };
 
@@ -71,7 +72,16 @@ export async function logPlannedMeal(
     food = recipeFoodSnapshot(userId, input.recipe, { calories: n.calories, proteinG: n.proteinG, carbsG: n.carbsG, fatG: n.fatG });
     await enqueue(userId, { kind: 'recipe_food', id: food.id, food, updatedAt: Date.now() });
   }
+  await queueFoodLog(userId, date, { id: input.logId, food, quantity: input.servings, mealType: input.mealType });
+  return { kind: 'logged', logId: input.logId };
+}
+
+export async function logPlannedMeal(
+  userId: string,
+  date: LocalDate,
+  input: { recipe: Recipe; servings: number; mealType: MealType; slotKey: string; confirmed: boolean }
+): Promise<PlannedLogResult> {
+  if (!input.confirmed) return { kind: 'not_confirmed' };
   const logId = plannedMealLogId(userId, { date, recipeId: input.recipe.id, mealType: input.mealType, slotKey: input.slotKey });
-  await queueFoodLog(userId, date, { id: logId, food, quantity: input.servings, mealType: input.mealType });
-  return { kind: 'logged', logId };
+  return queueRecipeLog(userId, date, { recipe: input.recipe, servings: input.servings, mealType: input.mealType, logId });
 }

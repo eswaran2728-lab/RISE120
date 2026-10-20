@@ -18,7 +18,7 @@ import { MEAL_TYPES, MealType, TargetsLike } from '../../src/food/types';
 import { FoodEntry } from '../../src/ui/FoodEntry';
 import { LimitNotice } from '../../src/ui/LimitNotice';
 import { useUnlock } from '../../src/monetization/useUnlock';
-import { formatReset, LimitSnapshot, loadLimitsOrCached, unlockActions } from '../../src/monetization/limits';
+import { capabilitiesOf, formatReset, LimitSnapshot, loadLimitsOrCached, unlockActions } from '../../src/monetization/limits';
 import { withAccountKey } from '../../src/auth/withAccountKey';
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -178,6 +178,10 @@ function FoodScreen() {
       <Text style={styles.meta}>{date}</Text>
       <TouchableOpacity testID="food-open-planner" accessibilityRole="button" style={styles.addButton} onPress={() => router.push('/meal-planner' as Href)}>
         <Text style={styles.addText}>{t('planner.open')}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity testID="food-open-photo" accessibilityRole="button" style={styles.addButton} onPress={() => router.push('/food-photo' as Href)}>
+        <Text style={styles.addText}>{t('food.photo.open')}</Text>
+        {limits && !capabilitiesOf(limits.snapshot).photoFood ? <Text style={styles.meta}>{t('food.photo.premiumHint')}</Text> : null}
       </TouchableOpacity>
       <TouchableOpacity testID="food-open-eating-out" accessibilityRole="button" style={styles.addButton} onPress={() => router.push('/eating-out' as Href)}>
         <Text style={styles.addText}>{t('eatingOut.open')}</Text>

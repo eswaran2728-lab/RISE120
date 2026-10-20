@@ -61,6 +61,33 @@ Server configuration (`app_config`): `food_photo_enabled` (false), `food_photo_p
 
 The deployed function passes `provider = null`, so on development a request ends in `unavailable` (`disabled` now; `provider` if the switch were on) and removes the image.
 
-## Remaining tasks
+## Task 3: the member flow (`app/food-photo.tsx`, `src/food/photo/*`)
 
-Task 3 (member confirmation flow) and Task 4 (real provider gate, device checks) follow; this document is extended as each lands.
+Reached from a **Log a meal with a photo** button on the Food tab. The button always opens the screen; the screen asks the server (`check-limit`'s `photoFood`, through `loadLimitsOrCached`) and shows one of: the photo steps, Premium plus manual search (server says not available), or "we could not check" with a retry plus manual search (no server answer: access is never guessed). **Manual food search is one tap away on every state.**
+
+The six steps, each in the member's hands:
+
+1. **Permission.** The camera is requested only when the member taps Take a photo. Denied: a plain explanation, the camera is not opened, and Choose a photo and manual search stay available.
+2. **Capture or select.** The picked image is downsized (longer edge at most 1280 px) and re-encoded as a JPEG into a per-account folder (`food-photos/<user id>/`, separate from check-in photos). The temporary re-encoder file is removed.
+3. **Upload and analyse.** One request id per photo, kept for retries; upload to the private bucket (an object already there counts as sent), then `analyse-food-photo`. The local copy is deleted as soon as the upload succeeds. Failure states are explained (no match, unavailable, premium needed, daily limit, still in progress, unknown outcome, failed, unusable photo, offline). Only a lost connection, a plain error or "still in progress" offer **Try again** (same request id). An **unknown outcome is never retried automatically** and has no retry button: choose another photo or search.
+4. **Candidate review.** Up to five candidates with the catalogue name, an uncertainty label (likely, possible, not sure), the source and verified label (or "Reviewed recipe") and a suggested amount labelled as a guess. A candidate the server marked unloggable shows why and cannot be opened.
+5. **Portion correction and 6. nutrition and source preview.** The record is read under the member's own access (a shared sourced food, or a published recipe at that version; a missing, private or no-longer-sourced record is "gone"). The existing entry sheet shows the source, serving, nutrition and total for the amount, prefilled with the suggestion and editable, plus a note that a photo cannot show the exact amount. A recipe with any unknown core nutrient is unloggable.
+7. **Save.** `confirmPhotoCandidate` is the only path from a photo to a meal. It uses the existing offline queue (`queueFoodLog`) with the entry's stable log id, so repeated Save is one log; the food keeps its source and verified label. A recipe goes through its private food (`recipe_food` queued before the log) exactly as in the meal planner. It works offline, and syncs later.
+
+Account safety: the screen is rebuilt per account; a late analysis for the previous account is dropped; leaving the screen removes the local photo and, if no answer arrived, the uploaded object; sign-out and account deletion remove the account's local food-photo folder.
+
+No text anywhere claims exact nutrition, allergy safety or halal status (tested).
+
+**Tested (Jest, synthetic data and mocked services):** the API contract and error mapping, candidate normalisation and caps, record resolution, the confirmation rules, local file handling, every screen state above including account switching, double Save and offline Save, the Food-tab entry and its access hint, sign-out and deletion clean-up, and the Malay and Tamil strings being present. **Not tested:** anything on a phone, real camera or gallery behaviour, whether the re-encoder really leaves no EXIF (the server rejects such a file if it does), and whether real camera JPEGs pass the server's byte check.
+
+**Strings.** Malay and Tamil text for this feature are drafts written without a native speaker and **await native-speaker review**.
+
+**Android permission note.** `expo-image-picker` is configured with `cameraPermission: false`; the Android CAMERA permission comes from the `expo-camera` plugin (barcode scanning), and its iOS usage text mentions only barcodes. Before a build that ships photo logging, the camera permission text must cover meal photos and the new build must be tried on a phone.
+
+## Task 4: not started (gate)
+
+Task 4 needs all of: a named operator, approved image-provider commercial and data terms for member photos, a bounded test budget, measured retention, a server-owned daily and monthly spend ceiling with a kill switch, and a sourced candidate catalogue. None exists, F1's OmniRoute no-go does not authorise routing images through it, and the provider kill switch (`food_photo_enabled`) stays off. With no provider the deployed function answers "unavailable" and the app shows manual search; with no catalogue of reviewed Malaysian foods the honest real-world result would be "no match".
+
+### Phone checklist (when a provider exists)
+
+Permission denied then allowed; capture and gallery selection; candidate edit and manual fallback; explicit Save; airplane mode after a candidate arrived; app restart; account switch; account deletion; a poor connection; large text, TalkBack and the Android Back button; English, Malay and Tamil with native-speaker review.

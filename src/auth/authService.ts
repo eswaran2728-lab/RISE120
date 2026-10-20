@@ -4,6 +4,7 @@ import { expoNotificationApi } from '../notifications/expoApi';
 import { supabase } from '../lib/supabase';
 import { clearDraft } from '../onboarding/draft';
 import { clearPending } from '../sync/queue';
+import { removeFoodPhotos } from '../food/photo/files';
 import { clearUserCache } from '../cache/userCache';
 import { removeLocalPhotos } from '../checkin/photos';
 
@@ -62,9 +63,19 @@ async function dropReminders(): Promise<void> {
 }
 
 export async function signOut(): Promise<void> {
+  const { data: sessionData } = await supabase.auth.getSession();
+  const userId = sessionData?.session?.user?.id;
   const { error } = await supabase.auth.signOut();
   if (error) {
     throw new Error(error.message);
+  }
+  // An unsent food photo belongs to the account that took it; never leave it on the phone for the next one.
+  if (userId) {
+    try {
+      removeFoodPhotos(userId);
+    } catch {
+      // Best effort: signing out must not fail because a local file could not be removed.
+    }
   }
   // A draft belongs to the person who started it; never carry it to the next account.
   await clearDraft();
@@ -85,6 +96,7 @@ export async function deleteAccount(): Promise<void> {
       await clearPending(userId);
       await clearUserCache(userId);
       removeLocalPhotos(userId);
+      removeFoodPhotos(userId);
     }
   } catch {
     // Best effort: the account is already deleted, so a local cleanup failure must not surface.

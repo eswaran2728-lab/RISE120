@@ -6,6 +6,7 @@ import { loadFoodDay } from '../loadDay';
 import { loadPlanBundle } from '../../plan/planData';
 import { loadLimitsOrCached } from '../../monetization/limits';
 import { useUnlock } from '../../monetization/useUnlock';
+import { t } from '../../i18n';
 
 jest.setTimeout(30000);
 
@@ -46,5 +47,36 @@ describe('the Food tab', () => {
     });
     expect(mockPush).toHaveBeenCalledWith('/eating-out');
     expect(tree.root.findAll((n) => typeof n.props.onPress === 'function' && n.findAll((m) => (m.type as unknown) === 'Text' && typeof m.children[0] === 'string' && (m.children[0] as string).startsWith('+ ')).length > 0).length).toBeGreaterThan(0);
+  });
+
+  it('has a discoverable photo entry that opens the photo flow, with the access hint taken from the server snapshot', async () => {
+    const snapshot = (photoFood: boolean) => ({ snapshot: { tier: photoFood ? 'premium' : 'free', planDaysAccessible: 120, food: { used: 0, base: 5, bonus: 0, remaining: 5 }, ai: { used: 0, base: 5, bonus: 0, remaining: 5 }, adRewards: { used: 0, max: 3, remaining: 3 }, quotaDayUtc: '2026-10-19', resetsAt: '2026-10-20T00:00:00.000Z', capabilities: { basicPlan: true, manualFood: true, adaptiveProgression: photoFood, mealPlanner: photoFood, photoFood, coach: true } }, stale: false });
+    (loadFoodDay as jest.Mock).mockResolvedValue(buildFoodDay({ date: '2026-10-19', synced: [], pending: [], knownFoods: [] }));
+    (loadPlanBundle as jest.Mock).mockResolvedValue(null);
+    (useUnlock as jest.Mock).mockReturnValue({ run: jest.fn(), busy: false });
+    const render = async () => {
+      let tree!: ReactTestRenderer;
+      await act(async () => {
+        tree = create(<FoodScreen />);
+      });
+      return tree;
+    };
+    const texts = (tree: ReactTestRenderer) => JSON.stringify(tree.toJSON());
+
+    (loadLimitsOrCached as jest.Mock).mockResolvedValue(snapshot(false));
+    const free = await render();
+    expect(texts(free)).toContain(t('food.photo.premiumHint'));
+    await act(async () => {
+      byId(free, 'food-open-photo')!.props.onPress();
+    });
+    expect(mockPush).toHaveBeenCalledWith('/food-photo');
+
+    (loadLimitsOrCached as jest.Mock).mockResolvedValue(snapshot(true));
+    expect(texts(await render())).not.toContain(t('food.photo.premiumHint'));
+
+    (loadLimitsOrCached as jest.Mock).mockResolvedValue(null); // unknown: no claim either way
+    const unknown = await render();
+    expect(texts(unknown)).not.toContain(t('food.photo.premiumHint'));
+    expect(byId(unknown, 'food-open-photo')).toBeDefined();
   });
 });
