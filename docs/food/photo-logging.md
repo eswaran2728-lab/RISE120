@@ -45,6 +45,22 @@ Server configuration (`app_config`): `food_photo_enabled` (false), `food_photo_p
 | Byte validation (non-JPEG, truncated, metadata, dimensions, size) | Unit tests on synthetic byte sequences (not real camera files) |
 | Real camera JPEGs from a phone pass the validator after the app re-encodes them | **Not tested** (needs a phone) |
 
+## Task 2: candidate analysis contract (fake provider only)
+
+`analyse-food-photo` (deployed to development with **no provider configured**): `POST { requestId, privateImageRef }` with a member JWT.
+
+- The image reference must be exactly the member's own `<user id>/<request id>.jpg`; another member's path, a check-in photo path or a different request id is a 400. Extra body fields (including any nutrition a client sends) are ignored and never stored.
+- Flow: reserve (ledger) -> read the image -> byte check -> **one** provider call under **one** deadline covering the whole call -> resolve the provider's suggestions against the catalogue -> store the one result -> delete the image.
+- A provider (the `PhotoProvider` port) only suggests **references** (`food` id or `recipe` id, optional confidence and portion). The answer is built by the server: only shared, sourced foods (`curated` or `usda`, verified or with a source id) and shared, published recipes survive. Unknown, fabricated, draft, private, other members', unsourced and Open Food Facts references are dropped. Names come from the catalogue, never from the provider; the uncertainty label is one of `likely`, `possible`, `unsure`; a portion is a quarter-serving suggestion between 0.25 and 10 or none; at most 5 candidates. **No nutrition is returned.** The app reads the full record under the member's own access when they review it.
+- A candidate whose record lacks complete sourced nutrition comes back with `loggable: false` (it can only lead to manual search).
+- Outcomes: `200 ok / no_match` (a stored result, replayed for the same request id even if the switch is later turned off), `409 in_progress`, `429 limited` with a retry time, `503 unavailable` (`disabled`, `premium_required`, `config`, `provider`), `422 invalid_image` (`missing`, `not_jpeg`, `malformed`, `metadata`, `dimensions`, `too_large`), `502 failed` (a **known** provider failure: recorded, image deleted at once, the same id may try again), `504 unknown`.
+- **Unknown outcomes** (a timeout, an error after which the provider may have answered, an unexpected error, a failed catalogue lookup after the provider answered): the request stays unresolved, the same id is **never started again**, and a late answer is ignored. The image is kept only until the retention period.
+- The function never writes a food log (tested for every outcome).
+
+**What the tests prove and do not prove.** The handler tests run the real ledger, storage and catalogue on Rise120 development with a **fake provider** and synthetic images, foods and recipes. They prove the contract above. They do **not** show that any real model can recognise a meal, how accurate it is in English, Malay or Tamil, or what it costs. With no catalogue of reviewed Malaysian foods published yet, the honest result for real use is `no_match` and manual search.
+
+The deployed function passes `provider = null`, so on development a request ends in `unavailable` (`disabled` now; `provider` if the switch were on) and removes the image.
+
 ## Remaining tasks
 
-Task 2 (analysis function over a fake provider), Task 3 (member confirmation flow) and Task 4 (real provider gate, device checks) follow; this document is extended as each lands.
+Task 3 (member confirmation flow) and Task 4 (real provider gate, device checks) follow; this document is extended as each lands.
