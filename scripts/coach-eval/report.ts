@@ -18,7 +18,15 @@ export interface ProviderSummary {
   failedMedianLatencyMs: number | null;
   totalCost: number | null; // successful calls only
   costCurrency: string | null;
-  costBasis: 'estimated' | 'unpriced' | 'none';
+  costBasis: 'reported' | 'estimated' | 'unpriced' | 'none';
+  answered: number;
+  refused: number;
+  invalid: number; // an answer that failed Rise120's own validation, or came from a different model than asked for
+  unknownOutcome: number; // may have been processed and billed; never retried automatically
+  knownFailures: number;
+  reportedInputTokens: number | null; // provider-reported, all calls including failed ones; null when none was reported
+  reportedOutputTokens: number | null;
+  maxUpstreamAttempts: number | null; // most requests Rise120 sent for one call (a gateway may start more upstream)
 }
 
 export type ReportStatus = 'fixture' | 'no_successful_responses' | 'incomplete' | 'real';
@@ -61,8 +69,14 @@ const median = (values: number[]) => {
 
 const failedCheck = (row: ScoreRow) => [row.safety, row.referral, row.grounding, row.proposal, row.languageCheck].some((v) => v === 'fail');
 
+const reportedTotal = (values: (number | null)[]) => {
+  const present = values.filter((v): v is number => v !== null);
+  return present.length > 0 ? present.reduce((sum, v) => sum + v, 0) : null;
+};
+
 function summarize(provider: string, rows: ScoreRow[]): ProviderSummary {
   const mine = rows.filter((row) => row.provider === provider);
+  const attempts = mine.map((row) => row.upstreamAttempts).filter((v): v is number => v !== null);
   const ok = mine.filter((row) => row.status === 'ok');
   const bad = mine.filter((row) => row.status === 'error');
   const priced = ok.filter((row) => row.cost !== null);
@@ -82,7 +96,15 @@ function summarize(provider: string, rows: ScoreRow[]): ProviderSummary {
     failedMedianLatencyMs: median(bad.map((row) => row.latencyMs)),
     totalCost: priced.length > 0 ? priced.reduce((sum, row) => sum + (row.cost ?? 0), 0) : null,
     costCurrency: priced[0]?.costCurrency ?? null,
-    costBasis: priced.length > 0 ? 'estimated' : ok.some((row) => row.costBasis === 'unpriced') ? 'unpriced' : 'none',
+    costBasis: priced.length > 0 ? (priced.every((row) => row.costBasis === 'reported') ? 'reported' : 'estimated') : ok.some((row) => row.costBasis === 'unpriced') ? 'unpriced' : 'none',
+    answered: mine.filter((row) => row.outcome === 'answered').length,
+    refused: mine.filter((row) => row.outcome === 'refused').length,
+    invalid: mine.filter((row) => row.outcome === 'invalid').length,
+    unknownOutcome: mine.filter((row) => row.outcome === 'unknown_outcome').length,
+    knownFailures: mine.filter((row) => row.outcome === 'failed').length,
+    reportedInputTokens: reportedTotal(mine.map((row) => row.reportedInputTokens)),
+    reportedOutputTokens: reportedTotal(mine.map((row) => row.reportedOutputTokens)),
+    maxUpstreamAttempts: attempts.length > 0 ? Math.max(...attempts) : null,
   };
 }
 
@@ -117,10 +139,14 @@ export function buildReport(result: EvalResult): Report {
       if (s.failed > 0) notes.push(`${s.provider}: ${s.failed} failed call${s.failed === 1 ? '' : 's'} of ${s.attempted} attempted (${s.succeeded} succeeded).`);
     }
   }
+  for (const s of summary) {
+    if (s.maxUpstreamAttempts !== null && s.maxUpstreamAttempts > 1) notes.push(`${s.provider}: Rise120 sent more than one request for a single call (at most ${s.maxUpstreamAttempts}); every attempt can be billed.`);
+    if (s.unknownOutcome > 0) notes.push(`${s.provider}: ${s.unknownOutcome} call${s.unknownOutcome === 1 ? '' : 's'} with an unknown outcome (possibly billed, never retried automatically).`);
+  }
   notes.push('Native-speaker review of Malay and Tamil replies has not been recorded by this tool. The language check is a script and vocabulary rule only; use the reviewer notes column.');
   notes.push('Consent in the scenario file is a declaration typed into the file, not proof. It must be verified independently of this tool before real member data is used.');
   notes.push('Latency is one call per scenario (no repeats) and noisy. Median latency counts successful calls only; failed calls are reported separately.');
-  notes.push('Token counts are estimated from character counts (about 4 characters per token) and understate Malay and Tamil. Cost is an estimate from the prices you supplied over successful calls, or shown as unpriced. It is not a bill.');
+  notes.push('Cost uses the token counts the provider reported when it reported them (basis: reported); otherwise tokens are estimated from character counts (about 4 characters per token), which understates Malay and Tamil (basis: estimated). Either way it is computed from the prices you supplied over successful calls, or shown as unpriced. It is not a bill, and a gateway can send more requests upstream than Rise120 sees.');
 
   const json = {
     mode: result.mode,
@@ -145,14 +171,14 @@ export function buildReport(result: EvalResult): Report {
     '',
     '## Summary',
     '',
-    '| Provider | Attempted | Succeeded | Failed | Answered with a failed check | en ok/attempted | ms ok/attempted | ta ok/attempted | Median latency, successful (ms) | Median latency, failed (ms) | Cost | Basis |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
+    '| Provider | Attempted | Succeeded | Failed | Answered with a failed check | en ok/attempted | ms ok/attempted | ta ok/attempted | Median latency, successful (ms) | Median latency, failed (ms) | Cost | Basis | Outcomes (answered/refused/invalid/unknown/failed) | Reported tokens in/out | Max requests per call |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |'
   );
   for (const s of summary) {
     const cost = s.totalCost === null ? '-' : `${s.totalCost.toFixed(6)} ${s.costCurrency ?? ''}`.trim();
     const lang = (code: (typeof LANGS)[number]) => `${s.byLanguage[code].succeeded}/${s.byLanguage[code].attempted}`;
     lines.push(
-      `| ${s.provider} | ${s.attempted} | ${s.succeeded} | ${s.failed} | ${s.scenariosWithFailedCheck} | ${lang('en')} | ${lang('ms')} | ${lang('ta')} | ${cell(s.medianLatencyMs)} | ${cell(s.failedMedianLatencyMs)} | ${cost} | ${s.costBasis} |`
+      `| ${s.provider} | ${s.attempted} | ${s.succeeded} | ${s.failed} | ${s.scenariosWithFailedCheck} | ${lang('en')} | ${lang('ms')} | ${lang('ta')} | ${cell(s.medianLatencyMs)} | ${cell(s.failedMedianLatencyMs)} | ${cost} | ${s.costBasis} | ${s.answered}/${s.refused}/${s.invalid}/${s.unknownOutcome}/${s.knownFailures} | ${cell(s.reportedInputTokens)}/${cell(s.reportedOutputTokens)} | ${cell(s.maxUpstreamAttempts)} |`
     );
   }
   lines.push(

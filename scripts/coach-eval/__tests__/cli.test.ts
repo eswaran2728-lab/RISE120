@@ -178,3 +178,52 @@ describe('live mode safeguards', () => {
     expect(summary('second:second-test').costBasis).toBe('unpriced');
   });
 });
+
+describe('live mode measurements', () => {
+  const scenarioFile = 'eval/private/scenarios.json';
+  const files = { [scenarioFile]: JSON.stringify(RAW_FIXTURE_SCENARIOS) };
+  const reportOf = (written: Record<string, string>) => JSON.parse(written[Object.keys(written).find((p) => p.endsWith('.json'))!]);
+  const withUsage = (url: string, extra: Record<string, unknown> = {}) => {
+    const body = goodAnswer(url) as Record<string, unknown>;
+    return url.includes('generativelanguage') ? { ...body, usageMetadata: { promptTokenCount: 100, candidatesTokenCount: 20 } } : { ...body, usage: { prompt_tokens: 100, completion_tokens: 20 }, ...extra };
+  };
+
+  it('records provider-reported tokens and one request per call, and prices from the reported tokens', async () => {
+    const fetcher = jest.fn(async (url: string) => ({ ok: true, status: 200, json: async () => withUsage(url) }));
+    const pricing = JSON.stringify({ gemini: { currency: 'USD', inputPerMTok: 0.1, outputPerMTok: 0.4 } });
+    const { deps, written } = setup({ env: liveEnv, files: { ...files, 'eval/private/pricing.json': pricing }, fetcher: fetcher as never });
+
+    await runCli(['--live', '--confirm-paid-calls', '--consent-verified', '--pricing', 'eval/private/pricing.json'], deps);
+
+    const summary = (name: string) => reportOf(written).summary.find((s: { provider: string }) => s.provider === name);
+    const calls = RAW_FIXTURE_SCENARIOS.length;
+    expect(summary('gemini:gemini-test')).toMatchObject({ reportedInputTokens: 100 * calls, reportedOutputTokens: 20 * calls, maxUpstreamAttempts: 1, costBasis: 'reported' });
+    expect(summary('second:second-test')).toMatchObject({ reportedInputTokens: 100 * calls, maxUpstreamAttempts: 1 });
+  });
+
+  it('counts a model other than the one asked for as an invalid answer, which is what a gateway fallback looks like', async () => {
+    const fetcher = jest.fn(async (url: string) => ({ ok: true, status: 200, json: async () => withUsage(url, { model: 'a-fallback-model' }) }));
+    const { deps, written } = setup({ env: liveEnv, files, fetcher: fetcher as never });
+
+    const code = await runCli(['--live', '--confirm-paid-calls', '--consent-verified'], deps);
+
+    const second = reportOf(written).summary.find((s: { provider: string }) => s.provider === 'second:second-test');
+    expect(second).toMatchObject({ invalid: RAW_FIXTURE_SCENARIOS.length, answered: 0 });
+    expect(code).toBe(3); // not a real comparison
+  });
+
+  it('counts a stalled gateway body as an unknown outcome and keeps the other provider\'s results', async () => {
+    const fetcher = jest.fn(async (url: string) => ({
+      ok: true,
+      status: 200,
+      json: () => (url.includes('generativelanguage') ? Promise.resolve(withUsage(url)) : new Promise(() => undefined)),
+    }));
+    const { deps, written } = setup({ env: { ...liveEnv, EVAL_PROVIDER_TIMEOUT_MS: '20' }, files: { [scenarioFile]: JSON.stringify(RAW_FIXTURE_SCENARIOS.slice(0, 3)) }, fetcher: fetcher as never });
+
+    await runCli(['--live', '--confirm-paid-calls', '--consent-verified'], deps);
+
+    const summary = (name: string) => reportOf(written).summary.find((s: { provider: string }) => s.provider === name);
+    expect(summary('second:second-test')).toMatchObject({ unknownOutcome: 3, answered: 0 });
+    expect(summary('gemini:gemini-test').answered).toBe(3);
+  });
+});

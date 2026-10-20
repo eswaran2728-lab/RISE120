@@ -207,3 +207,52 @@ describe('Gemini failures', () => {
     spies.forEach((s) => s.mockRestore());
   });
 });
+
+describe('Gemini: one deadline for the whole answer, and provider-reported usage', () => {
+  it('stops waiting when the headers arrive but the body stalls, as an unknown outcome', async () => {
+    const stalled = { ok: true, status: 200, json: () => new Promise(() => undefined) };
+    const { provider } = setup(stalled, { timeoutMs: 20 });
+
+    const error = await provider.generate(baseContext(), 'hello').catch((e) => e);
+
+    expect(error).toBeInstanceOf(CoachProviderError);
+    expect(error).toMatchObject({ kind: 'timeout', outcomeUnknown: true });
+  });
+
+  it('aborts the request when the deadline passes, so a stalled body is not left reading', async () => {
+    let signal: AbortSignal | undefined;
+    const stalled = { ok: true, status: 200, json: () => new Promise(() => undefined) };
+    const fetcher = jest.fn(async (_url: string, init: { signal?: AbortSignal }) => {
+      signal = init.signal;
+      return stalled;
+    });
+    const provider = createGeminiProvider({ apiKey: KEY, model: MODEL, fetcher: fetcher as never, timeoutMs: 20 });
+
+    await provider.generate(baseContext(), 'hello').catch(() => undefined);
+
+    expect(signal?.aborted).toBe(true);
+  });
+
+  it('reports the provider-reported token counts, and does so even when the answer is refused or unusable', async () => {
+    const usage = jest.fn();
+    const withUsage = (body: Record<string, unknown>) => okResponse({ ...body, usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 30, thoughtsTokenCount: 5, totalTokenCount: 155 } });
+    const answered = createGeminiProvider({ apiKey: KEY, model: MODEL, fetcher: (async () => withUsage(candidate(modelJson('Hi')))) as never, onUsage: usage });
+    const refused = createGeminiProvider({ apiKey: KEY, model: MODEL, fetcher: (async () => withUsage(candidate('', 'SAFETY'))) as never, onUsage: usage });
+    const unusable = createGeminiProvider({ apiKey: KEY, model: MODEL, fetcher: (async () => withUsage(candidate('not json'))) as never, onUsage: usage });
+
+    await answered.generate(baseContext(), 'hello');
+    await refused.generate(baseContext(), 'hello');
+    await unusable.generate(baseContext(), 'hello').catch(() => undefined);
+
+    expect(usage).toHaveBeenCalledTimes(3);
+    expect(usage).toHaveBeenCalledWith({ inputTokens: 120, outputTokens: 35 }); // thinking tokens are billed as output
+  });
+
+  it('does not call the usage hook when the provider reports none, and never fails because of a bad usage block', async () => {
+    const usage = jest.fn();
+    const provider = createGeminiProvider({ apiKey: KEY, model: MODEL, fetcher: (async () => okResponse({ ...candidate(modelJson('Hi')), usageMetadata: { promptTokenCount: 'many' } })) as never, onUsage: usage });
+
+    await expect(provider.generate(baseContext(), 'hello')).resolves.toMatchObject({ text: 'Hi' });
+    expect(usage).not.toHaveBeenCalled();
+  });
+});

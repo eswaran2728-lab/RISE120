@@ -6,7 +6,7 @@ import { createGeminiProvider } from '../../supabase/functions/_shared/coach/gem
 import { RAW_FIXTURE_SCENARIOS, createFixtureProviders } from './fixtures.ts';
 import { createOpenAiCompatibleProvider } from './openai.ts';
 import { buildReport } from './report.ts';
-import { ProviderSpec, runEvaluation } from './run.ts';
+import { CallMeter, ProviderSpec, runEvaluation } from './run.ts';
 import { ScenarioRejected, parseScenarios } from './scenarios.ts';
 import type { Pricing } from './score.ts';
 
@@ -30,6 +30,26 @@ const DEFAULT_SCENARIOS = 'eval/private/scenarios.json';
 const REPORT_DIR = 'eval/reports';
 const REQUIRED_ENV = ['GEMINI_API_KEY', 'GEMINI_MODEL', 'EVAL_SECOND_BASE_URL', 'EVAL_SECOND_API_KEY', 'EVAL_SECOND_MODEL'];
 const SECRET_ENV = ['GEMINI_API_KEY', 'EVAL_SECOND_API_KEY'];
+
+// Counts the requests Rise120 sends and keeps the token counts the provider reports, for one provider. The run reads
+// and clears it after every call.
+function createMeter(base: Fetcher | undefined) {
+  let attempts = 0;
+  let usage: { inputTokens: number; outputTokens: number } | null = null;
+  const fetcher: Fetcher = (url, init) => {
+    attempts += 1;
+    return (base ?? ((u, i) => fetch(u, i)))(url, init);
+  };
+  const meter: CallMeter = {
+    take() {
+      const reading = { usage, attempts };
+      attempts = 0;
+      usage = null;
+      return reading;
+    },
+  };
+  return { fetcher, meter, onUsage: (reported: { inputTokens: number; outputTokens: number }) => (usage = reported) };
+}
 
 function option(argv: string[], name: string): string | undefined {
   const index = argv.indexOf(name);
@@ -85,16 +105,23 @@ export async function runCli(argv: string[], deps: CliDeps): Promise<number> {
       }
     }
     const env = deps.env as Record<string, string>;
+    // Optional: a shorter end-to-end deadline for a gateway test (milliseconds); the coach's own limit otherwise.
+    const timeout = Number(env.EVAL_PROVIDER_TIMEOUT_MS);
+    const timeoutMs = Number.isInteger(timeout) && timeout > 0 ? timeout : undefined;
+    const first = createMeter(deps.fetcher);
+    const second = createMeter(deps.fetcher);
     providers = [
       {
         name: `gemini:${env.GEMINI_MODEL}`,
-        provider: createGeminiProvider({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL, fetcher: deps.fetcher }),
+        provider: createGeminiProvider({ apiKey: env.GEMINI_API_KEY, model: env.GEMINI_MODEL, fetcher: first.fetcher, onUsage: first.onUsage, timeoutMs }),
         pricing: isPricing(prices.gemini) ? prices.gemini : null,
+        meter: first.meter,
       },
       {
         name: `second:${env.EVAL_SECOND_MODEL}`,
-        provider: createOpenAiCompatibleProvider({ baseUrl: env.EVAL_SECOND_BASE_URL, apiKey: env.EVAL_SECOND_API_KEY, model: env.EVAL_SECOND_MODEL, fetcher: deps.fetcher }),
+        provider: createOpenAiCompatibleProvider({ baseUrl: env.EVAL_SECOND_BASE_URL, apiKey: env.EVAL_SECOND_API_KEY, model: env.EVAL_SECOND_MODEL, fetcher: second.fetcher, onUsage: second.onUsage, timeoutMs }),
         pricing: isPricing(prices.second) ? prices.second : null,
+        meter: second.meter,
       },
     ];
   }

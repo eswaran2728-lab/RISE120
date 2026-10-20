@@ -104,8 +104,10 @@ All checks are deterministic rules; no model judges a model.
 | Grounding | Every `mustMention` fact appears, no `mustNotMention` claim appears |
 | Proposal | The proposal is run through the **real server validator** (`validateCoachReply`) against the scenario's plan. `required` needs a surviving proposal; `none` fails on any proposal |
 | Language check | Script and vocabulary only: Tamil letters for `ta`, Malay function words for `ms`, Latin text without Tamil or Malay markers for `en`. It cannot judge fluency or tone |
-| Latency | Wall-clock milliseconds for one call (no retries). Single-run numbers are noisy: repeat before trusting them |
-| Cost | Tokens estimated as characters ÷ 4 (prompt and reply), times your prices. **An estimate**: it understates Malay and Tamil, which use more tokens per character. Replace with provider-reported usage if you later extend the adapters |
+| Latency | Wall-clock milliseconds for one call, including reading the whole answer (no retries). Single-run numbers are noisy: repeat before trusting them |
+| Cost | Uses the **provider-reported** token counts when the provider returns them (basis `reported`), otherwise characters ÷ 4 (basis `estimated`, which understates Malay and Tamil), times your prices. Failed calls keep their reported tokens in the summary because they can be billed |
+| Outcome | Each call is `answered`, `refused`, `invalid` (failed Rise120's validator, or came from a different model than asked for), `unknown_outcome` (may have been processed and billed; the coach never retries it automatically) or a known failure |
+| Requests per call | How many requests Rise120 sent for one call (the adapters never retry, so 1). A gateway can still start more upstream; that is invisible here and is flagged in the report notes |
 | Reviewer notes | Left empty for a native speaker or the product owner |
 
 A provider failure (timeout, HTTP error, unusable reply) is recorded as an error row with its kind only, so every provider always has the same scenario set.
@@ -133,3 +135,11 @@ OmniRoute (https://github.com/diegosouzapw/OmniRoute) is a gateway that exposes 
 6. Only then: any change of provider, which would be a separate task with its own tests.
 
 Launch gates for the coach itself (real Gemini secrets in Supabase, a phone pass in all three languages, daily cap, ad credit and premium, failed call not charged, accepted and declined proposals, offline, account switch and deletion) belong to Task 7 and the deferred device pass.
+
+## Gateway failure modes covered by synthetic tests (F1 Task 2)
+
+Run with fake `fetch` only; no gateway, key or provider was contacted. Both the Gemini adapter and the evaluation's OpenAI-compatible adapter now use **one end-to-end deadline that includes reading the body** (`supabase/functions/_shared/coach/deadline.ts`): a server that sends headers and then stalls ends as a `timeout` with an unknown outcome and the request is aborted. Before this change the timer stopped as soon as the headers arrived, so a stalled body could hold a request open. The OpenAI-compatible adapter also: treats an HTTP 5xx or gateway timeout as an unknown outcome (a gateway may already have generated and been billed for an answer), treats 429 and 401 as known failures, rejects an answer whose `model` differs from the one requested (what a gateway fallback looks like), sends exactly one request per call whatever happens, and never puts a key or response text in an error.
+
+`EVAL_PROVIDER_TIMEOUT_MS` (optional) shortens the deadline for a live gateway test.
+
+Still **not measured**: real Gemini or gateway behaviour, real quality, real cost, and how many upstream requests a real gateway starts. See `docs/omniroute-operations.md`.

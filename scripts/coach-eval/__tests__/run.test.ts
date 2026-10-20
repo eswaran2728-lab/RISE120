@@ -151,3 +151,102 @@ describe('secrets and private text stay out of logs and reports', () => {
     expect(result.rows.filter((r) => r.provider === 'leaky').every((r) => r.errorKind === 'unexpected')).toBe(true);
   });
 });
+
+describe('measurements a gateway evaluation needs', () => {
+  const reply = (text: string, extra: Record<string, unknown> = {}) => ({ text, proposal: null, ...extra });
+  const scripted = (steps: (() => unknown)[], meter?: ProviderSpec['meter']): ProviderSpec => {
+    let call = 0;
+    return {
+      name: 'scripted',
+      pricing: { currency: 'USD', inputPerMTok: 1, outputPerMTok: 2 },
+      meter,
+      provider: {
+        generate: async () => {
+          const step = steps[call++ % steps.length];
+          const value = step();
+          if (value instanceof Error) throw value;
+          return value as never;
+        },
+      },
+    };
+  };
+  const run = (spec: ProviderSpec, count = 5) => {
+    const fine = createFixtureProviders();
+    return runEvaluation({ scenarios: scenarios.slice(0, count), providers: [spec], now: fine.now, mode: 'fixture' });
+  };
+
+  it('classifies every call as answered, refused, invalid, unknown outcome or a known failure', async () => {
+    const spec = scripted([
+      () => reply('Keep going this week'),
+      () => reply('Please see a doctor', { refused: true }),
+      () => new CoachProviderError('invalid', false, 'coach_provider_bad_output'),
+      () => new CoachProviderError('timeout', true, 'coach_provider_timeout'),
+      () => new CoachProviderError('unavailable', false, 'coach_provider_http_429'),
+    ]);
+
+    const result = await run(spec);
+
+    expect(result.rows.map((r) => r.outcome)).toEqual(['answered', 'refused', 'invalid', 'unknown_outcome', 'failed']);
+  });
+
+  it('treats a reply the server validator rejects as invalid', async () => {
+    const result = await run(scripted([() => reply('x'.repeat(5000))]), 1);
+
+    expect(result.rows[0]).toMatchObject({ status: 'error', errorKind: 'invalid_reply', outcome: 'invalid' });
+  });
+
+  it('records the provider-reported tokens and how many requests Rise120 sent, and prices from the reported tokens', async () => {
+    const meter = { take: jest.fn(() => ({ usage: { inputTokens: 1000, outputTokens: 500 }, attempts: 1 })) };
+
+    const result = await run(scripted([() => reply('Keep going this week')], meter), 1);
+
+    expect(result.rows[0]).toMatchObject({ reportedInputTokens: 1000, reportedOutputTokens: 500, upstreamAttempts: 1, costBasis: 'reported' });
+    expect(result.rows[0].cost).toBeCloseTo((1000 * 1 + 500 * 2) / 1_000_000, 10);
+  });
+
+  it('still records reported tokens and attempts for a call that failed, because a failed call can be billed', async () => {
+    const meter = { take: jest.fn(() => ({ usage: { inputTokens: 300, outputTokens: 0 }, attempts: 1 })) };
+
+    const result = await run(scripted([() => new CoachProviderError('timeout', true, 'coach_provider_timeout')], meter), 1);
+
+    expect(result.rows[0]).toMatchObject({ status: 'error', outcome: 'unknown_outcome', reportedInputTokens: 300, upstreamAttempts: 1, cost: null });
+  });
+
+  it('falls back to the estimate, and says so, when the provider reports no usage', async () => {
+    const meter = { take: jest.fn(() => ({ usage: null, attempts: 1 })) };
+
+    const result = await run(scripted([() => reply('Keep going this week')], meter), 1);
+
+    expect(result.rows[0]).toMatchObject({ reportedInputTokens: null, reportedOutputTokens: null, costBasis: 'estimated' });
+  });
+
+  it('takes the meter reading for each call separately', async () => {
+    const readings = [{ usage: { inputTokens: 10, outputTokens: 1 }, attempts: 1 }, { usage: { inputTokens: 20, outputTokens: 2 }, attempts: 2 }];
+    let i = 0;
+
+    const result = await run(scripted([() => reply('Keep going this week')], { take: () => readings[i++] }), 2);
+
+    expect(result.rows.map((r) => [r.reportedInputTokens, r.upstreamAttempts])).toEqual([[10, 1], [20, 2]]);
+  });
+
+  it('reports the outcome mix, the reported tokens and the most requests any call needed, and flags more than one request per call', async () => {
+    const meter = { take: jest.fn().mockReturnValueOnce({ usage: { inputTokens: 100, outputTokens: 10 }, attempts: 1 }).mockReturnValue({ usage: { inputTokens: 100, outputTokens: 10 }, attempts: 2 }) };
+    const result = await run(scripted([() => reply('Keep going this week'), () => new CoachProviderError('timeout', true, 'coach_provider_timeout')], meter), 4);
+
+    const report = buildReport(result);
+
+    expect(report.json.summary[0]).toMatchObject({ answered: 2, unknownOutcome: 2, refused: 0, invalid: 0, knownFailures: 0, reportedInputTokens: 400, reportedOutputTokens: 40, maxUpstreamAttempts: 2 });
+    expect(report.json.notes.join(' ')).toMatch(/more than one request/i);
+  });
+
+  it('keeps every secret and all provider text out of the report, whatever a provider throws', async () => {
+    const spec = scripted([() => new Error(`socket closed ${SECRET} knee pain`)]);
+    const result = await runEvaluation({ scenarios: scenarios.slice(0, 2), providers: [spec], now: createFixtureProviders().now, mode: 'fixture', secrets: [SECRET], log: () => undefined });
+
+    const report = buildReport(result);
+
+    expect(JSON.stringify(report.json)).not.toContain(SECRET);
+    expect(JSON.stringify(report.json)).not.toContain('knee');
+    expect(report.markdown).not.toContain('knee');
+  });
+});

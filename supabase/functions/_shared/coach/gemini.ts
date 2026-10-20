@@ -1,6 +1,7 @@
 // Gemini adapter behind the CoachProvider interface. Server only: the API key and model name come from server
 // secrets (the caller passes them in), never from the app or Git. Nothing here logs prompts, replies or the key,
 // and an error message never carries the key or any part of the response body.
+import { ReportedUsage, geminiUsage, reportUsage, withDeadline } from './deadline.ts';
 import { SAFE_FALLBACK, buildSystemPrompt, buildUserPrompt } from './prompt.ts';
 import { COACH_LIMITS, CoachContext, CoachProvider, CoachProviderError, CoachReply, CoachValidationError } from './types.ts';
 import { parseCoachOutput, validateMessage } from './validate.ts';
@@ -15,6 +16,8 @@ export interface GeminiOptions {
   model: string;
   fetcher?: Fetcher;
   timeoutMs?: number;
+  // Called with the token counts the provider reported for a call (evaluation only; never required).
+  onUsage?: (usage: ReportedUsage) => void;
 }
 
 const ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -87,42 +90,28 @@ export function createGeminiProvider(options: GeminiOptions): CoachProvider {
         safetySettings: SAFETY_CATEGORIES.map((category) => ({ category, threshold: 'BLOCK_MEDIUM_AND_ABOVE' })),
       };
 
-      const controller = new AbortController();
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const timedOut = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => {
-          controller.abort();
-          reject(new CoachProviderError('timeout', true, 'coach_provider_timeout'));
-        }, timeoutMs);
-      });
-
-      let response;
-      try {
-        response = await Promise.race([
-          fetcher(`${ENDPOINT}/${options.model}:generateContent`, {
+      // One deadline covers the request AND reading the whole answer.
+      const data = await withDeadline(timeoutMs, async (signal) => {
+        let response;
+        try {
+          response = await fetcher(`${ENDPOINT}/${options.model}:generateContent`, {
             method: 'POST',
             headers: { 'content-type': 'application/json', 'x-goog-api-key': options.apiKey },
             body: JSON.stringify(body),
-            signal: controller.signal,
-          }),
-          timedOut,
-        ]);
-      } catch (error) {
-        if (error instanceof CoachProviderError) throw error;
-        // The request may have been processed even though we never saw the answer.
-        throw new CoachProviderError('unavailable', true, 'coach_provider_request_failed');
-      } finally {
-        clearTimeout(timer);
-      }
-
-      if (!response.ok) throw new CoachProviderError('unavailable', false, `coach_provider_http_${response.status}`);
-
-      let data: Record<string, any>;
-      try {
-        data = (await response.json()) as Record<string, any>;
-      } catch {
-        throw new CoachProviderError('invalid', false, 'coach_provider_unreadable');
-      }
+            signal,
+          });
+        } catch {
+          // The request may have been processed even though we never saw the answer.
+          throw new CoachProviderError('unavailable', true, 'coach_provider_request_failed');
+        }
+        if (!response.ok) throw new CoachProviderError('unavailable', false, `coach_provider_http_${response.status}`);
+        try {
+          return (await response.json()) as Record<string, any>;
+        } catch {
+          throw new CoachProviderError('invalid', false, 'coach_provider_unreadable');
+        }
+      });
+      reportUsage(options.onUsage, geminiUsage(data));
 
       const refusal: CoachReply = { text: SAFE_FALLBACK[context.language], proposal: null, refused: true };
       if (data?.promptFeedback?.blockReason) return refusal;

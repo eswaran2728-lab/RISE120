@@ -18,7 +18,14 @@ export interface Outcome {
   reply: CoachReply | null;
   errorKind: string | null;
   latencyMs: number;
+  outcomeUnknown?: boolean; // the request may have been processed (and billed) although no answer was seen
+  usage?: { inputTokens: number; outputTokens: number } | null; // token counts the provider itself reported
+  attempts?: number | null; // requests Rise120 sent for this call (a gateway may start more upstream; see the docs)
 }
+
+// How a call ended, in terms of what a coach request must do next: an answer, a safe refusal, an answer that failed
+// Rise120's own validation, a call whose outcome is unknown (never retried automatically), or a known failure.
+export type OutcomeClass = 'answered' | 'refused' | 'invalid' | 'unknown_outcome' | 'failed';
 
 export interface ScoreRow {
   provider: string;
@@ -36,7 +43,11 @@ export interface ScoreRow {
   outputTokens: number;
   cost: number | null;
   costCurrency: string | null;
-  costBasis: 'estimated' | 'unpriced' | 'none';
+  costBasis: 'reported' | 'estimated' | 'unpriced' | 'none';
+  outcome: OutcomeClass;
+  reportedInputTokens: number | null;
+  reportedOutputTokens: number | null;
+  upstreamAttempts: number | null;
   reviewerNotes: string;
 }
 
@@ -67,11 +78,21 @@ function checkLanguage(language: CoachLanguage, text: string): Verdict {
 const estimateTokens = (chars: number) => Math.ceil(chars / 4);
 
 export function scoreOutcome(scenario: EvalScenario, outcome: Outcome, pricing: Pricing | null = null, provider = ''): ScoreRow {
-  const base = { provider, scenarioId: scenario.id, language: scenario.language, latencyMs: outcome.latencyMs, reviewerNotes: '' };
+  const base = {
+    provider,
+    scenarioId: scenario.id,
+    language: scenario.language,
+    latencyMs: outcome.latencyMs,
+    reviewerNotes: '',
+    reportedInputTokens: outcome.usage?.inputTokens ?? null,
+    reportedOutputTokens: outcome.usage?.outputTokens ?? null,
+    upstreamAttempts: outcome.attempts ?? null,
+  };
   const failed = (errorKind: string): ScoreRow => ({
     ...base,
     status: 'error',
     errorKind,
+    outcome: outcome.outcomeUnknown ? 'unknown_outcome' : errorKind === 'invalid' || errorKind === 'invalid_reply' ? 'invalid' : 'failed',
     safety: 'error',
     referral: 'error',
     grounding: 'error',
@@ -113,8 +134,9 @@ export function scoreOutcome(scenario: EvalScenario, outcome: Outcome, pricing: 
   else if (expectation.proposal === 'none') proposal = hadProposal ? 'fail' : 'n/a';
   else proposal = hadProposal ? (validated.proposal ? 'pass' : 'fail') : 'n/a';
 
-  const inputTokens = estimateTokens(buildSystemPrompt(scenario.language).length + buildUserPrompt(context, scenario.message).length);
-  const outputTokens = estimateTokens(text.length);
+  const reported = outcome.usage ?? null;
+  const inputTokens = reported?.inputTokens ?? estimateTokens(buildSystemPrompt(scenario.language).length + buildUserPrompt(context, scenario.message).length);
+  const outputTokens = reported?.outputTokens ?? estimateTokens(text.length);
   const cost = pricing ? (inputTokens * pricing.inputPerMTok + outputTokens * pricing.outputPerMTok) / 1_000_000 : null;
 
   return {
@@ -130,6 +152,7 @@ export function scoreOutcome(scenario: EvalScenario, outcome: Outcome, pricing: 
     outputTokens,
     cost,
     costCurrency: pricing?.currency ?? null,
-    costBasis: pricing ? 'estimated' : 'unpriced',
+    costBasis: pricing ? (reported ? 'reported' : 'estimated') : 'unpriced',
+    outcome: outcome.reply.refused === true ? 'refused' : 'answered',
   };
 }

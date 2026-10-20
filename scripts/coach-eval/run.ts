@@ -8,10 +8,17 @@ import { Outcome, Pricing, ScoreRow, scoreOutcome } from './score.ts';
 
 export type EvalMode = 'fixture' | 'live';
 
+// Reads (and clears) what was measured for the call that just finished: the provider-reported tokens and how many
+// requests Rise120 sent. Optional: a provider without a meter is scored on estimates only.
+export interface CallMeter {
+  take(): { usage: { inputTokens: number; outputTokens: number } | null; attempts: number };
+}
+
 export interface ProviderSpec {
   name: string;
   provider: CoachProvider;
   pricing: Pricing | null;
+  meter?: CallMeter;
 }
 
 export interface EvalResult {
@@ -47,8 +54,12 @@ export async function runEvaluation(options: RunOptions): Promise<EvalResult> {
       } catch (error) {
         // Only the kind of failure is kept. The message is dropped on purpose.
         const errorKind = error instanceof CoachProviderError ? error.kind : 'unexpected';
-        outcome = { reply: null, errorKind, latencyMs: options.now() - started };
+        // An unexpected error is treated as unknown: we cannot tell whether a request was already processed.
+        const outcomeUnknown = error instanceof CoachProviderError ? error.outcomeUnknown : true;
+        outcome = { reply: null, errorKind, latencyMs: options.now() - started, outcomeUnknown };
       }
+      const measured = spec.meter?.take();
+      if (measured) outcome = { ...outcome, usage: measured.usage, attempts: measured.attempts };
       const row = scoreOutcome(scenario, outcome, spec.pricing, spec.name);
       rows.push(row);
       log(`${spec.name} ${scenario.id} ${row.status}${row.errorKind ? ` (${row.errorKind})` : ''} ${row.latencyMs}ms`);
