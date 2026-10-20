@@ -29,17 +29,20 @@ Deno.serve(async (req) => {
   const { data, error } = await admin.auth.getUser(token);
   if (error || !data.user) return json({ error: 'Unauthorized' }, 401);
 
-  // Remove the user's private check-in photos first: Storage objects are not removed by the
+  // Remove the user's private photos first: Storage objects are not removed by the
   // database cascade, and the auth user cannot be deleted while it still owns objects. If this
   // fails we stop before deleting the user, so a retry can finish the job.
   const userId = data.user.id;
-  const photos = admin.storage.from('checkin-photos');
-  for (;;) {
-    const { data: files, error: listError } = await photos.list(userId, { limit: 1000 });
-    if (listError) return json({ error: 'Could not delete account' }, 500);
-    if (!files || files.length === 0) break;
-    const { error: removeError } = await photos.remove(files.map((file) => `${userId}/${file.name}`));
-    if (removeError) return json({ error: 'Could not delete account' }, 500);
+  // Both private photo buckets: check-in photos and temporary food photos.
+  for (const bucket of ['checkin-photos', 'food-photos']) {
+    const photos = admin.storage.from(bucket);
+    for (;;) {
+      const { data: files, error: listError } = await photos.list(userId, { limit: 1000 });
+      if (listError) return json({ error: 'Could not delete account' }, 500);
+      if (!files || files.length === 0) break;
+      const { error: removeError } = await photos.remove(files.map((file) => `${userId}/${file.name}`));
+      if (removeError) return json({ error: 'Could not delete account' }, 500);
+    }
   }
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
