@@ -225,7 +225,7 @@ describe('what the server answers', () => {
     ['in progress', { kind: 'in_progress' }, 'food.photo.inProgress'],
     ['unknown outcome', { kind: 'unknown' }, 'food.photo.unknown'],
     ['failed', { kind: 'failed' }, 'food.photo.failed'],
-    ['invalid image', { kind: 'invalid_image' }, 'food.photo.invalidImage'],
+    ['invalid image', { kind: 'invalid_image', missing: false }, 'food.photo.invalidImage'],
     ['offline', { kind: 'offline' }, 'food.photo.offline'],
     ['error', { kind: 'error' }, 'food.photo.failed'],
   ])('explains %s and keeps manual search available', async (_name, answer, key) => {
@@ -269,6 +269,86 @@ describe('what the server answers', () => {
     await press(tree, 'photo-take');
 
     expect(mocked.upload.mock.calls[1][1]).not.toBe(mocked.upload.mock.calls[0][1]);
+  });
+});
+
+describe('a temporary problem, and an image that cleanup removed', () => {
+  it('keeps the photo for a retry after a temporary server problem: same request id, no second upload, and the local copy stays until the answer', async () => {
+    mocked.analyse.mockResolvedValueOnce({ kind: 'temporary' });
+    mocked.analyse.mockResolvedValueOnce({ kind: 'ok', candidates: [candidate()] });
+    const tree = await mount();
+
+    await press(tree, 'photo-take');
+    expect(shows(tree, t('food.photo.temporary'))).toBe(true);
+    expect(mocked.removeLocal).not.toHaveBeenCalled();
+    await press(tree, 'photo-retry');
+
+    expect(mocked.upload).toHaveBeenCalledTimes(1);
+    expect(mocked.analyse).toHaveBeenCalledTimes(2);
+    expect(mocked.analyse.mock.calls[1][1]).toBe(mocked.analyse.mock.calls[0][1]);
+    expect(has(tree, `photo-candidate-${FOOD_ID}`)).toBe(true);
+    expect(mocked.removeLocal).toHaveBeenCalledWith('file:///docs/food-photos/A/1.jpg');
+  });
+
+  it('does not remove the local copy while the server has not answered', async () => {
+    mocked.analyse.mockReturnValue(new Promise(() => undefined));
+    const tree = await mount();
+
+    await act(async () => {
+      void byId(tree, 'photo-take')!.props.onPress();
+    });
+
+    expect(mocked.upload).toHaveBeenCalled();
+    expect(mocked.removeLocal).not.toHaveBeenCalled();
+  });
+
+  it('sends the photo again, once, under the same request id, when the server says the uploaded image is gone', async () => {
+    mocked.analyse.mockResolvedValueOnce({ kind: 'temporary' });
+    mocked.analyse.mockResolvedValueOnce({ kind: 'invalid_image', missing: true });
+    mocked.analyse.mockResolvedValueOnce({ kind: 'ok', candidates: [candidate()] });
+    const tree = await mount();
+
+    await press(tree, 'photo-take');
+    await press(tree, 'photo-retry');
+
+    expect(mocked.upload).toHaveBeenCalledTimes(2);
+    expect(mocked.upload.mock.calls[1]).toEqual(mocked.upload.mock.calls[0]); // same account, request id and local file
+    expect(mocked.analyse).toHaveBeenCalledTimes(3);
+    expect(has(tree, `photo-candidate-${FOOD_ID}`)).toBe(true);
+  });
+
+  it('does not loop: a second missing image is explained, and the local copy is then removed', async () => {
+    mocked.analyse.mockResolvedValue({ kind: 'invalid_image', missing: true });
+    const tree = await mount();
+
+    await press(tree, 'photo-take');
+
+    expect(mocked.upload).toHaveBeenCalledTimes(2);
+    expect(mocked.analyse).toHaveBeenCalledTimes(2);
+    expect(shows(tree, t('food.photo.invalidImage'))).toBe(true);
+    expect(mocked.removeLocal).toHaveBeenCalledWith('file:///docs/food-photos/A/1.jpg');
+  });
+
+  it('explains a photo the server refused for its content without sending it again', async () => {
+    mocked.analyse.mockResolvedValue({ kind: 'invalid_image', missing: false });
+    const tree = await mount();
+
+    await press(tree, 'photo-take');
+
+    expect(mocked.upload).toHaveBeenCalledTimes(1);
+    expect(shows(tree, t('food.photo.invalidImage'))).toBe(true);
+  });
+
+  it('stops quietly if the re-upload cannot be made, and keeps the explanation', async () => {
+    mocked.analyse.mockResolvedValueOnce({ kind: 'invalid_image', missing: true });
+    mocked.upload.mockResolvedValueOnce({ kind: 'ok' });
+    mocked.upload.mockResolvedValueOnce({ kind: 'offline' });
+    const tree = await mount();
+
+    await press(tree, 'photo-take');
+
+    expect(shows(tree, t('food.photo.offline'))).toBe(true);
+    expect(has(tree, 'photo-retry')).toBe(true);
   });
 });
 
@@ -457,7 +537,7 @@ describe('accounts and clean-up', () => {
 
 describe('translations', () => {
   it.each(['ms', 'ta'])('has the photo text in %s rather than falling back to English', async (language) => {
-    const keys = ['food.photo.open', 'food.photo.intro', 'food.photo.take', 'food.photo.permissionDenied', 'food.photo.noMatch', 'food.photo.estimateNote', 'food.photo.unloggable', 'food.photo.likely', 'food.photo.unknown'];
+    const keys = ['food.photo.open', 'food.photo.intro', 'food.photo.take', 'food.photo.permissionDenied', 'food.photo.noMatch', 'food.photo.estimateNote', 'food.photo.unloggable', 'food.photo.likely', 'food.photo.unknown', 'food.photo.temporary'];
     await i18next.changeLanguage('en');
     const english = keys.map((k) => t(k));
     await i18next.changeLanguage(language);

@@ -64,7 +64,10 @@ export async function handleFoodPhotoRequest(input: { userId: string; body: unkn
   try {
     image = await deps.readImage(imagePath);
   } catch {
-    return reply(500, { error: 'Could not complete that' }); // could not even look: unresolved, retried by lease expiry
+    // A Storage error before the provider started: nothing was sent anywhere, so this is a KNOWN, retryable outcome. The
+    // reservation is released (no charge, no second start possible) and the image is left alone for the retry.
+    await deps.fail(userId, requestId).catch(() => undefined);
+    return reply(503, { status: 'temporary' });
   }
   if (!image) {
     await release();

@@ -16,7 +16,8 @@ export type AnalysisResult =
   | { kind: 'in_progress' }
   | { kind: 'limited'; retryAt: string | null }
   | { kind: 'unavailable'; reason: 'disabled' | 'premium_required' | 'config' | 'provider' | 'other' }
-  | { kind: 'invalid_image' }
+  | { kind: 'invalid_image'; missing: boolean } // missing: the uploaded image is gone (cleanup removed it), so it may be sent again
+  | { kind: 'temporary' } // a storage hiccup before the photo was looked at: retry with the same request id
   | { kind: 'failed' } // a known failure: the photo may be tried again
   | { kind: 'unknown' } // the outcome is unknown: it is never re-run automatically
   | { kind: 'offline' }
@@ -39,7 +40,9 @@ function fromBody(body: Record<string, unknown> | undefined): AnalysisResult | n
     case 'unavailable':
       return { kind: 'unavailable', reason: REASONS.has(String(body.reason)) ? (body.reason as 'disabled') : 'other' };
     case 'invalid_image':
-      return { kind: 'invalid_image' };
+      return { kind: 'invalid_image', missing: body.reason === 'missing' };
+    case 'temporary':
+      return { kind: 'temporary' };
     case 'failed':
       return { kind: 'failed' };
     case 'unknown':

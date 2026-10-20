@@ -41,6 +41,7 @@ const RESULT_TEXT: Record<string, string> = {
   unknown: 'food.photo.unknown',
   offline: 'food.photo.offline',
   error: 'food.photo.failed',
+  temporary: 'food.photo.temporary',
 };
 
 function textKeyFor(result: Exclude<AnalysisResult, { kind: 'ok' }>): string {
@@ -67,7 +68,7 @@ function FoodPhotoScreen() {
   const saveGuard = useRef(false);
   // The photo being processed: one request id for all its retries, the local file until it has been sent, and whether the
   // server has given a definite answer (after which it has already deleted the image).
-  const current = useRef<{ requestId: string; localUri: string | null; uploaded: boolean; answered: boolean } | null>(null);
+  const current = useRef<{ requestId: string; localUri: string | null; uploaded: boolean; answered: boolean; resent: boolean } | null>(null);
   const run = useRef(0);
 
   const cleanUp = useCallback(() => {
@@ -122,19 +123,35 @@ function FoodPhotoScreen() {
       const sent = pending.localUri ? await uploadFoodPhoto(userId, pending.requestId, pending.localUri) : ({ kind: 'error' } as const);
       if (!live(id)) return;
       if (sent.kind !== 'ok') return setPhase({ name: 'result', textKey: sent.kind === 'offline' ? 'food.photo.offline' : 'food.photo.failed', retry: true });
+      // The local copy is kept until the server has answered: if cleanup removes the uploaded image before a retry, the
+      // photo can be sent again under the same request id.
       pending.uploaded = true;
-      if (pending.localUri) {
-        removeLocalFoodPhoto(pending.localUri);
-        pending.localUri = null;
-      }
     }
     setPhase({ name: 'working', stage: 'analysing' });
     const result = await analysePhoto(userId, pending.requestId);
     if (!live(id)) return;
-    // A definite answer means the server has deleted the image. offline, error and in_progress leave it for a retry.
-    if (result.kind !== 'offline' && result.kind !== 'error' && result.kind !== 'in_progress') pending.answered = true;
+    // The uploaded image is gone (cleanup removed it before the retry): send the kept photo again, once, under the same
+    // request id. The server has not started a provider for it, so nothing is charged twice.
+    if (result.kind === 'invalid_image' && result.missing && pending.localUri && !pending.resent) {
+      pending.resent = true;
+      pending.uploaded = false;
+      return sendAndAnalyse(id);
+    }
+    // A definite answer means the server has finished with the image (and deleted it); the local copy goes too.
+    const retryable = result.kind === 'offline' || result.kind === 'error' || result.kind === 'in_progress' || result.kind === 'temporary';
+    if (!retryable) {
+      pending.answered = true;
+      if (pending.localUri) {
+        try {
+          removeLocalFoodPhoto(pending.localUri);
+        } catch {
+          // The system clears its own cache.
+        }
+        pending.localUri = null;
+      }
+    }
     if (result.kind === 'ok') return setPhase({ name: 'review', candidates: result.candidates, notice: null });
-    setPhase({ name: 'result', textKey: textKeyFor(result), retry: result.kind === 'offline' || result.kind === 'error' || result.kind === 'in_progress' });
+    setPhase({ name: 'result', textKey: textKeyFor(result), retry: retryable });
   };
 
   const take = async (source: 'camera' | 'library') => {
@@ -152,7 +169,7 @@ function FoodPhotoScreen() {
 
     cleanUp();
     const id = ++run.current;
-    current.current = { requestId: randomId(), localUri: null, uploaded: false, answered: false };
+    current.current = { requestId: randomId(), localUri: null, uploaded: false, answered: false, resent: false };
     setPhase({ name: 'working', stage: 'preparing' });
     const asset = picked.assets[0];
     try {

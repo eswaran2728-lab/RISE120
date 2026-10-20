@@ -384,6 +384,8 @@ describe('analyse-food-photo handler (live ledger, storage and catalogue; fake p
       ['something that is not a JPEG', new TextEncoder().encode('not an image'), 'not_jpeg'],
       ['a truncated file', syntheticJpeg({ noEoi: true }), 'malformed'],
       ['dimensions beyond the bound', syntheticJpeg({ width: 5000, height: 5000 }), 'dimensions'],
+      ['bytes after the end of the picture', syntheticJpeg({ trailing: 40 }), 'malformed'],
+      ['an application segment that is not what it claims', syntheticJpeg({ app2Text: 'hidden note' }), 'metadata'],
     ])('never shows %s to the provider: refused, recorded as a known failure, image deleted', async (_name, bytes, reason) => {
       await enabled(async () => {
         const id = uuid();
@@ -426,6 +428,103 @@ describe('analyse-food-photo handler (live ledger, storage and catalogue; fake p
         expect([...fake.seen[0]]).toEqual([...bytes]);
         expect(await exists(foodPhotoPath(A.id, id))).toBe(false);
         expect((await ledger(A, id))!.status).toBe('completed');
+      });
+    });
+  });
+
+  describe('a transient Storage read error before the provider starts', () => {
+    const flaky = (provider: PhotoProvider, failures: number) => {
+      const base = createFoodPhotoDeps(admin, provider);
+      let left = failures;
+      return { ...base, readImage: async (path: string) => { if (left-- > 0) throw new Error('storage unavailable'); return base.readImage(path); } };
+    };
+    const send = (user: TestUser, id: string, deps: ReturnType<typeof createFoodPhotoDeps>) =>
+      handleFoodPhotoRequest({ userId: user.id, body: { requestId: id, privateImageRef: foodPhotoPath(user.id, id) } }, deps);
+
+    it('releases the request as retryable: no provider start, no kept charge, and the image stays for the retry', async () => {
+      await enabled(async () => {
+        await setConfig('food_photo_per_day', 1, async () => {
+          const id = uuid();
+          await upload(A, id);
+          const fake = provider([guess('food', food.shared)]);
+          const deps = flaky(fake, 1);
+
+          const first = await send(A, id, deps);
+
+          expect(first).toMatchObject({ status: 503, body: { status: 'temporary' } });
+          expect(fake.calls).toBe(0);
+          expect((await ledger(A, id))!.status).toBe('failed');
+          expect(await exists(foodPhotoPath(A.id, id))).toBe(true);
+          // The release counts nothing against the allowance: a different request is still admitted.
+          const other = uuid();
+          await upload(A, other);
+          const otherFake = provider([]);
+          expect((await send(A, other, createFoodPhotoDeps(admin, otherFake))).status).toBe(200);
+        });
+      });
+    });
+
+    it('succeeds on the same request id when the retry comes, with exactly one provider start and one completed analysis', async () => {
+      await enabled(async () => {
+        await setConfig('food_photo_per_day', 1, async () => {
+          const id = uuid();
+          await upload(A, id);
+          const fake = provider([guess('food', food.shared)]);
+          const deps = flaky(fake, 2);
+
+          expect((await send(A, id, deps)).status).toBe(503);
+          expect((await send(A, id, deps)).status).toBe(503);
+          const retry = await send(A, id, deps);
+          const again = await send(A, id, deps); // a repeat after success replays
+
+          expect(retry.status).toBe(200);
+          expect(again).toEqual(retry);
+          expect(fake.calls).toBe(1);
+          expect((await admin.from('food_photo_requests').select('status').eq('user_id', A.id).eq('status', 'completed')).data).toHaveLength(1);
+          expect(await exists(foodPhotoPath(A.id, id))).toBe(false); // deleted once the result was stored
+        });
+      });
+    });
+
+    it('does not let two simultaneous retries both start the provider', async () => {
+      await enabled(async () => {
+        const id = uuid();
+        await upload(A, id);
+        const fake = provider([guess('food', food.shared)]);
+        const deps = flaky(fake, 1);
+        await send(A, id, deps);
+
+        const results = await Promise.all([send(A, id, deps), send(A, id, deps)]);
+
+        expect(fake.calls).toBe(1);
+        expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+      });
+    });
+
+    it('does not turn a storage error into a missing image: that would delete the image and refuse the retry', async () => {
+      await enabled(async () => {
+        const id = uuid();
+        await upload(A, id);
+
+        const result = await send(A, id, flaky(provider([]), 1));
+
+        expect(result.status).toBe(503);
+        expect(result.body).not.toMatchObject({ status: 'invalid_image' });
+      });
+    });
+
+    it('still answers missing, once, when cleanup has really removed the image, and then the same id can be retried after a new upload', async () => {
+      await enabled(async () => {
+        const id = uuid();
+        const fake = provider([guess('food', food.shared)]);
+
+        const missing = await send(A, id, createFoodPhotoDeps(admin, fake)); // nothing in storage
+        expect(missing).toMatchObject({ status: 422, body: { status: 'invalid_image', reason: 'missing' } });
+        expect(fake.calls).toBe(0);
+
+        await upload(A, id);
+        expect((await send(A, id, createFoodPhotoDeps(admin, fake))).status).toBe(200);
+        expect(fake.calls).toBe(1);
       });
     });
   });
