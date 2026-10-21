@@ -82,7 +82,7 @@ No text anywhere claims exact nutrition, allergy safety or halal status (tested)
 
 **Strings.** Malay and Tamil text for this feature are drafts written without a native speaker and **await native-speaker review**.
 
-**Android permission note.** `expo-image-picker` is configured with `cameraPermission: false`; the Android CAMERA permission comes from the `expo-camera` plugin (barcode scanning), and its iOS usage text mentions only barcodes. Before a build that ships photo logging, the camera permission text must cover meal photos and the new build must be tried on a phone.
+**Android permission note (corrected 21 Oct 2026).** An earlier version of this note said the Android CAMERA permission comes from the barcode plugin. That was wrong: `expo-image-picker` is configured with `cameraPermission: false`, which makes the generated manifest contain `uses-permission android.permission.CAMERA tools:node="remove"`, and that removal overrides the permission `expo-camera` declares. As configured, neither the barcode scanner nor the photo camera can get camera permission on Android. It has not been fixed or tried on a phone (see `docs/health/health-connect.md`, open finding 1).
 
 ## Review fixes (after `c29ff3d`)
 

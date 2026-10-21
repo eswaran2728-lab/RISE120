@@ -21,7 +21,11 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_SLEEP"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -41,8 +45,29 @@
       "expo-localization",
       "expo-notifications",
       "@react-native-google-signin/google-signin",
-      ["expo-image-picker", { "cameraPermission": false, "microphonePermission": false }],
-      ["expo-camera", { "cameraPermission": "Allow Rise120 to use the camera to scan food barcodes.", "recordAudioAndroid": false }]
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow Rise120 to use the camera to scan food barcodes.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 26
+          }
+        }
+      ],
+      "react-native-health-connect"
     ],
     "experiments": {
       "typedRoutes": true

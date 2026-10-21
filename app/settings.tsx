@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import i18next, { t } from '../src/i18n';
 import { useLanguage } from '../src/i18n/useLanguage';
@@ -11,6 +11,7 @@ import { updateProfilePreference } from '../src/settings/preferences';
 import { cacheUnits } from '../src/profile/cache';
 import { ReminderSettings } from '../src/notifications/ReminderSettings';
 import { expoNotificationApi } from '../src/notifications/expoApi';
+import { HealthSection } from '../src/health/HealthSection';
 
 const LANGUAGES = ['en', 'ms', 'ta'] as const;
 const UNITS = ['metric', 'imperial'] as const;
@@ -120,6 +121,8 @@ export default function SettingsScreen() {
       ))}
 
       {userId ? <ReminderSettings userId={userId} api={expoNotificationApi} /> : null}
+
+      {userId && Platform.OS === 'android' ? <HealthSection key={userId} userId={userId} /> : null}
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
